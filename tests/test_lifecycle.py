@@ -71,10 +71,20 @@ async def main():
         await pg.wait_for_timeout(200)
         check("скасування показує банер", await pg.evaluate("document.getElementById('banner').classList.contains('on')"))
 
-        # 7. велике джерело (повний екран) -> картка в центрі
-        await pg.set_viewport_size({"width": 1280, "height": 720})
-        cx, cy = await pg.evaluate("[card.offsetLeft + card.offsetWidth / 2, card.offsetTop + card.offsetHeight / 2]")
-        check(f"картка в центрі 1280×720 ({cx:.0f}, {cy:.0f})", abs(cx - 640) <= 2 and abs(cy - 360) <= 2)
+        # 7. велике джерело (повний екран) -> картка в центрі й розтягнута на всю ширину
+        await pg.set_viewport_size({"width": 1920, "height": 1080})
+        await pg.wait_for_timeout(600)
+        x, y, w, h = await pg.evaluate("(r => [r.x, r.y, r.width, r.height])(card.getBoundingClientRect())")
+        check(f"картка в центрі 1920×1080 ({x + w/2:.0f}, {y + h/2:.0f})", abs(x + w/2 - 960) <= 3 and abs(y + h/2 - 540) <= 3)
+        check(f"картка масштабована під джерело (ширина {w:.0f})", abs(w - 640 * 1920 / 660) <= 3)
+        # результати 3 варіантів на весь екран теж вміщаються
+        await pg.evaluate("""onBegin({id:'m',title:'M',locks_at:new Date(Date.now()+60000).toISOString(),
+            outcomes:['a','b','c'].map(id=>({id,title:id}))},true)""")
+        await pg.evaluate("""onEnd({id:'m',status:'resolved',winning_outcome_id:'a',outcomes:['a','b','c'].map(id=>({id,
+            top_predictors:[{user_name:'n'+id,channel_points_used:100,channel_points_won:id==='a'?300:null}]}))})""")
+        await pg.wait_for_timeout(600)
+        rt = await pg.evaluate("document.getElementById('results').getBoundingClientRect().top")
+        check(f"списки 3 варіантів вміщаються на 1920×1080 (top={rt:.0f})", rt >= 0)
 
         # 8. параметри з #fragment (токен не йде на сервер); без token віджет нікуди не стукає
         await pg.goto(URL + "#client_id=abc&rows=3")
