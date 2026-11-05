@@ -9,7 +9,7 @@ import asyncio, sys, pathlib
 from playwright.async_api import async_playwright
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-URL = (ROOT / "widget.html").as_uri()
+URL = (ROOT / "widget" / "index.html").as_uri()
 
 def chrome_path():
     if "--chrome" in sys.argv:
@@ -75,6 +75,10 @@ async def main():
         await pg.set_viewport_size({"width": 1280, "height": 720})
         cx, cy = await pg.evaluate("[card.offsetLeft + card.offsetWidth / 2, card.offsetTop + card.offsetHeight / 2]")
         check(f"картка в центрі 1280×720 ({cx:.0f}, {cy:.0f})", abs(cx - 640) <= 2 and abs(cy - 360) <= 2)
+
+        # 8. параметри з #fragment (токен не йде на сервер); без token віджет нікуди не стукає
+        await pg.goto(URL + "#client_id=abc&rows=3")
+        check("параметри читаються з #", await pg.evaluate("CFG.clientId === 'abc' && CFG.rows === 3"))
 
         check("немає JS-помилок " + str(errs), not errs)
         await b.close()

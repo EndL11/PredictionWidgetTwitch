@@ -2,6 +2,8 @@
 <html lang="uk">
 <head>
 <meta charset="UTF-8">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src https://id.twitch.tv; base-uri 'none'; form-action 'none'">
 <title>Налаштування віджета прогнозів</title>
 <style>
   body { font-family: "Segoe UI", Roboto, Arial, sans-serif; background: #0e0e10; color: #efeff1;
@@ -24,9 +26,9 @@
 
 <h2>1. Створіть Twitch-застосунок (один раз)</h2>
 <ol>
-  <li>Відкрийте <a href="https://dev.twitch.tv/console/apps/create" target="_blank" style="color:#bf94ff">dev.twitch.tv/console/apps/create</a> (потрібна двофакторна автентифікація на акаунті).</li>
+  <li>Відкрийте <a href="https://dev.twitch.tv/console/apps/create" target="_blank" rel="noopener noreferrer" style="color:#bf94ff">dev.twitch.tv/console/apps/create</a> (потрібна двофакторна автентифікація на акаунті).</li>
   <li>Name — будь-яка назва, наприклад <code>MyPredictionWidget</code>.</li>
-  <li>OAuth Redirect URLs: <code>http://localhost</code></li>
+  <li>OAuth Redirect URLs: <code id="ru"></code> (точно так, разом зі слешем в кінці).</li>
   <li>Category: <code>Broadcaster Suite</code>, Client Type: <code>Public</code>.</li>
   <li>Збережіть і скопіюйте <b>Client ID</b>.</li>
 </ol>
@@ -36,7 +38,7 @@
 <button id="login">Увійти через Twitch і отримати токен</button>
 
 <h2>2. Вставте адресу після входу</h2>
-<p>Після підтвердження браузер відкриє сторінку <code>http://localhost/#access_token=…</code> — вона покаже помилку «не вдається відкрити сайт», це нормально. Скопіюйте <b>всю адресу</b> з адресного рядка й вставте сюди:</p>
+<p id="redirHint">Якщо сторінку відкрито через https, після входу Twitch поверне вас сюди і поле заповниться само. Якщо локально: браузер відкриє <code>http://localhost/#access_token=…</code> з помилкою «не вдається відкрити сайт», це нормально. Скопіюйте <b>всю адресу</b> з адресного рядка й вставте сюди:</p>
 <input id="redir" placeholder="http://localhost/#access_token=...&scope=...">
 
 <h2>3. Додаткові параметри (необовʼязково)</h2>
@@ -62,27 +64,47 @@
 <ol>
   <li>Джерела → <b>+</b> → <b>Браузер</b>.</li>
   <li>Зніміть галочку «Локальний файл», у поле URL вставте посилання вище.</li>
-  <li>Ширина <code>660</code>, висота <code>360</code> (віджет притискається до низу, а над ним виїжджають списки; для 3+ варіантів — <code>460</code>).</li>
+  <li>Ширина <code>660</code>, висота <code>360</code> (віджет стоїть по центру, а над ним виїжджають списки; для 3+ варіантів — <code>460</code>; на весь екран — <code>1920×1080</code>).</li>
   <li>Увімкніть <b>«Керувати аудіо через OBS»</b>, щоб звук ішов у мікшер і на стрім.</li>
 </ol>
-<p>Перевірити вигляд без Twitch: відкрийте <code>widget.html?demo=1</code>.</p>
+<p>Перевірити вигляд без Twitch: відкрийте <code>widget/#demo=1</code>.</p>
 <p style="color:#adadb8;font-size:13px">Токен живе приблизно 60 днів. Коли віджет напише «Токен недійсний», просто повторіть кроки 1–3 (застосунок створювати знову не треба). Нікому не показуйте посилання — у ньому ваш токен.</p>
 
 <script>
 const $ = id => document.getElementById(id);
 $("cid").value = localStorage.getItem("pw_cid") || "";
+// на https (DigitalOcean) Twitch повертає токен прямо сюди; локально — на http://localhost, адресу копіюють вручну
+const HTTPS = location.protocol === "https:";
+const REDIRECT = HTTPS ? location.origin + "/setup/" : "http://localhost";
+$("ru").textContent = REDIRECT;
+
+// повернення з Twitch: токен у #fragment (на сервер не потрапляє), перевіряємо state від CSRF
+{
+  const h = new URLSearchParams(location.hash.slice(1));
+  if (h.has("access_token") || h.has("error")) {
+    history.replaceState(null, "", location.pathname); // прибрати токен з адресного рядка й історії
+    const ok = h.get("state") && h.get("state") === sessionStorage.getItem("pw_state");
+    sessionStorage.removeItem("pw_state");
+    if (h.has("error")) { $("msg").className = "err"; $("msg").textContent = "Twitch: " + (h.get("error_description") || h.get("error")); }
+    else if (!ok) { $("msg").className = "err"; $("msg").textContent = "Відповідь Twitch не пройшла перевірку state — натисніть «Увійти» ще раз"; }
+    else { $("redir").value = h.get("access_token"); $("msg").className = "ok"; $("msg").textContent = "✔ Токен отримано. Налаштуйте параметри й згенеруйте посилання."; }
+  }
+}
 
 $("login").onclick = () => {
   const cid = $("cid").value.trim();
   if (!cid) return alert("Вкажіть Client ID");
   localStorage.setItem("pw_cid", cid);
+  const state = crypto.randomUUID();
+  sessionStorage.setItem("pw_state", state);
   const u = new URL("https://id.twitch.tv/oauth2/authorize");
   u.searchParams.set("client_id", cid);
-  u.searchParams.set("redirect_uri", "http://localhost");
+  u.searchParams.set("redirect_uri", REDIRECT);
   u.searchParams.set("response_type", "token");
   u.searchParams.set("scope", "channel:read:predictions");
+  u.searchParams.set("state", state);
   u.searchParams.set("force_verify", "true");
-  window.open(u.toString(), "_blank");
+  if (HTTPS) location.assign(u.toString()); else window.open(u.toString(), "_blank", "noopener");
 };
 
 $("make").onclick = async () => {
@@ -98,7 +120,7 @@ $("make").onclick = async () => {
     const j = await r.json();
     if (j.client_id !== cid) throw new Error("токен виданий для іншого Client ID");
     if (!j.scopes.includes("channel:read:predictions")) throw new Error("немає дозволу channel:read:predictions");
-    const base = location.href.split(/[?#]/)[0].replace(/setup\.html$/i, "widget.html");
+    const base = new URL("../widget/", location.href.split(/[?#]/)[0]).href;
     const p = new URLSearchParams({ client_id: cid, token });
     if ($("sound").value.trim()) p.set("sound", $("sound").value.trim());
     if ($("vol").value.trim() !== "0.7") p.set("volume", $("vol").value.trim());
@@ -108,7 +130,8 @@ $("make").onclick = async () => {
     if ($("rows").value.trim() !== "5") p.set("rows", $("rows").value.trim());
     if ($("speed").value.trim() !== "35") p.set("speed", $("speed").value.trim());
     if (!$("res").checked) p.set("results", "0");
-    const url = base + "?" + p.toString();
+    // параметри після # — фрагмент не йде на сервер, тож токен не потрапить у логи хостингу
+    const url = base + "#" + p.toString();
     $("out").textContent = url; $("out").style.display = "block"; $("copy").style.display = "inline-block";
     const days = Math.round(j.expires_in / 86400);
     msg.className = "ok"; msg.textContent = `✔ Канал: ${j.login}. Токен дійсний ще ~${days} дн.`;

@@ -2,6 +2,8 @@
 <html lang="uk">
 <head>
 <meta charset="UTF-8">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; media-src * data: blob: file:; connect-src https://id.twitch.tv https://api.twitch.tv wss://eventsub.wss.twitch.tv; base-uri 'none'; form-action 'none'">
 <title>Twitch Prediction Widget</title>
 <style>
   :root {
@@ -192,7 +194,7 @@
 
 <script>
 /* ================== CONFIG (з URL-параметрів) ==================
-   widget.html?client_id=XXX&token=YYY
+   widget/#client_id=XXX&token=YYY   (після # — фрагмент не йде на сервер і в його логи; старий формат ?… теж працює)
    Необов'язкові:
      sound=URL_або_шлях_до_mp3   – свій звук на старті (інакше вбудований)
      volume=0.0..1.0             – гучність (за замовч. 0.7)
@@ -204,7 +206,7 @@
      speed=35                    – швидкість прокрутки результатів (пікселів/сек)
      results=0                   – вимкнути списки переможців/програвших
 ================================================================= */
-const P = new URLSearchParams(location.search);
+const P = new URLSearchParams(location.hash.length > 1 ? location.hash.slice(1) : location.search);
 const CFG = {
   clientId: P.get("client_id") || "",
   token: (P.get("token") || "").replace(/^oauth:/, ""),

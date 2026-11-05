@@ -1,8 +1,9 @@
-name: sample-html
+name: prediction-widget
 static_sites:
-- environment_slug: html
+- name: prediction-widget
+  environment_slug: html
   github:
+    repo: EndL11/PredictionWidgetTwitch
     branch: main
     deploy_on_push: true
-    repo: digitalocean/sample-html
-  name: sample-html
+  index_document: index.html

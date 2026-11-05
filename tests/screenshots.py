@@ -6,7 +6,7 @@ import asyncio, sys, pathlib
 from playwright.async_api import async_playwright
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-URL = (ROOT / "widget.html").as_uri() + "?demo=1"
+URL = (ROOT / "widget" / "index.html").as_uri() + "#demo=1"
 exe = sys.argv[sys.argv.index("--chrome") + 1] if "--chrome" in sys.argv else None
 
 async def main():
