@@ -54,6 +54,9 @@ async def main():
         await pg.wait_for_timeout(300)
         check("знову видимий після end", await vis())
         check("списки результатів показані", await pg.evaluate("document.getElementById('results').classList.contains('on')"))
+        # картка по центру: списки над нею не мають вилазити за верх джерела 680×360 (offsetTop ігнорує transform)
+        rtop = await pg.evaluate("card.offsetTop + document.getElementById('results').offsetTop")
+        check(f"списки вміщаються над карткою (top={rtop})", rtop >= 0)
         await pg.wait_for_timeout(3000); check("схований після результатів", not await vis())
 
         # 5. timer reaches 0 without lock event -> hides
@@ -67,6 +70,11 @@ async def main():
         await pg.evaluate("onEnd({id:'c',status:'canceled',winning_outcome_id:null,outcomes:[{id:'a'},{id:'b'}]})")
         await pg.wait_for_timeout(200)
         check("скасування показує банер", await pg.evaluate("document.getElementById('banner').classList.contains('on')"))
+
+        # 7. велике джерело (повний екран) -> картка в центрі
+        await pg.set_viewport_size({"width": 1280, "height": 720})
+        cx, cy = await pg.evaluate("[card.offsetLeft + card.offsetWidth / 2, card.offsetTop + card.offsetHeight / 2]")
+        check(f"картка в центрі 1280×720 ({cx:.0f}, {cy:.0f})", abs(cx - 640) <= 2 and abs(cy - 360) <= 2)
 
         check("немає JS-помилок " + str(errs), not errs)
         await b.close()

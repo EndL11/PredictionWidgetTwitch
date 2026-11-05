@@ -41,13 +41,13 @@ OBS Browser Source віджет для прогнозів Twitch за бали �
 - **CORS**: `id.twitch.tv/oauth2/validate` і `api.twitch.tv/helix` дозволяють запити з браузера, сервер не потрібен. Токен отримується через implicit grant (`id.twitch.tv/oauth2/authorize?response_type=token`) (redirect на `http://localhost`, токен користувач копіює з адресного рядка), бо `file://` не може бути redirect URI.
 - **Implicit-токен** не оновлюється, живе близько 60 днів. Віджет показує помилку в `#status`.
 - **Автовідтворення звуку**: OBS CEF дозволяє звук без взаємодії користувача. У звичайному Chrome звук на демо може не грати, поки не було кліку.
-- Висоту джерела в OBS має задати користувач. Картка притиснута до низу (`body` flex `justify-content:flex-end`), а списки займають місце над нею.
+- Висоту джерела в OBS має задати користувач. Картка стоїть по центру джерела (`body` flex `justify-content:center; align-items:center`), а списки займають місце над нею. У 660×360 (2 варіанти) і 660×460 (3 варіанти) над карткою лишається лише кілька пікселів запасу, тест це перевіряє.
 - Токен потрапляє в URL. **Не можна** логувати його, відправляти кудись, крім Twitch, або комітити згенеровані URL.
 
 ## Тестування
 ```bash
 pip install playwright && playwright install chromium
-python tests/test_lifecycle.py [--chrome /path/to/chrome]   # 10 перевірок: показ/приховування, плавність, скасування, JS-помилки
+python tests/test_lifecycle.py [--chrome /path/to/chrome]   # 12 перевірок: показ/приховування, плавність, скасування, центрування, JS-помилки
 python tests/screenshots.py   [--chrome /path/to/chrome]    # оновлює docs/*.png (~45 с)
 ```
 Ручна перевірка: відкрити `widget.html?demo=1`. Перевірка з реальними даними: створити тестовий прогноз на своєму каналі в Twitch (панель «Прогнози» в чаті або в Stream Manager).
