@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<title>Twitch Prediction Widget</title>
+<style>
+  :root {
+    --blue: #387aff;
+    --pink: #f5009b;
+    --bg: transparent;
+    --text: #ffffff;
+    --muted: #adadb8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: transparent; overflow: hidden; }
+  body {
+    font-family: "Inter", "Segoe UI", Roboto, Arial, sans-serif;
+    color: var(--text);
+    padding: 10px;
+    height: 100vh;
+    display: flex; flex-direction: column; justify-content: flex-end;
+    text-shadow: 0 1px 2px rgba(0,0,0,.9), 0 0 6px rgba(0,0,0,.6);
+  }
+  #card {
+    position: relative;
+    width: 100%;
+    max-width: 640px;
+    background: var(--bg);
+    border-radius: 14px;
+    padding: 16px 18px 18px;
+    opacity: 0;
+    transform: translateY(-16px) scale(.98);
+    transition: opacity .45s ease, transform .45s ease;
+  }
+  #card.show { opacity: 1; transform: none; }
+
+  #title {
+    text-align: center;
+    font-weight: 800;
+    font-size: 22px;
+    line-height: 1.2;
+    margin-bottom: 12px;
+    transition: opacity .5s ease;
+    text-shadow: 0 2px 4px rgba(0,0,0,.95), 0 0 10px rgba(0,0,0,.7);
+  }
+
+  /* --- two outcomes layout --- */
+  .duo-head {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: end;
+    gap: 10px;
+    margin-bottom: 6px;
+  }
+  .side { min-width: 0; }
+  .side.right { text-align: right; }
+  .oname {
+    font-weight: 700;
+    font-size: 16px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 4px;
+  }
+  .stats {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 3px 10px;
+    border-radius: 6px;
+    font-weight: 700;
+    font-size: 14px;
+    min-width: 120px;
+  }
+  .side.left .stats  { background: var(--c, var(--blue)); }
+  .side.right .stats { background: var(--c, var(--pink)); flex-direction: row-reverse; }
+  .pts { display: inline-flex; align-items: center; gap: 4px; }
+  .pts svg { width: 14px; height: 14px; }
+  .winflag { font-weight: 800; font-size: 13px; }
+  .stats.won { box-shadow: 0 0 0 2px #fff; }
+  #card.rolling #title { opacity: .25; }
+  .users { font-weight: 600; opacity: .85; font-size: 12px; }
+  .ratio { font-weight: 600; opacity: .85; font-size: 12px; }
+
+  #timer {
+    font-variant-numeric: tabular-nums;
+    font-weight: 800;
+    font-size: 18px;
+    padding-bottom: 4px;
+    white-space: nowrap;
+    text-align: center;
+  }
+  #timer.locked { color: #ffcc00; font-size: 14px; }
+  #timer.ended  { color: #00e676; font-size: 14px; }
+  #timer.canceled { color: var(--muted); font-size: 14px; }
+
+  .bar {
+    display: flex;
+    height: 44px;
+    border-radius: 10px;
+    overflow: hidden;
+    background: rgba(0,0,0,.25);
+  }
+  .seg {
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    font-weight: 800;
+    font-size: 20px;
+    transition: flex-basis 1s cubic-bezier(.25,.8,.25,1), filter .6s, opacity .4s, box-shadow .4s;
+    min-width: 64px;
+    white-space: nowrap;
+  }
+  .seg.r { justify-content: flex-end; }
+  .seg small { font-size: 13px; font-weight: 700; margin-left: 1px; }
+  .seg.loser { filter: grayscale(.7) brightness(.7); }
+  .seg.winner { box-shadow: inset 0 0 0 3px #fff; }
+
+  /* --- multi outcomes layout --- */
+  .multi-row { margin-top: 8px; }
+  .multi-row .line {
+    display: flex; justify-content: space-between; gap: 8px;
+    font-size: 14px; font-weight: 700; margin-bottom: 3px;
+  }
+  .multi-row .line span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .multi-row .line .meta { color: var(--muted); font-weight: 600; white-space: nowrap; }
+  .multi-row .track { height: 20px; border-radius: 6px; background: rgba(0,0,0,.25); overflow: hidden; }
+  .multi-row .fill {
+    height: 100%; border-radius: 6px;
+    display: flex; align-items: center; padding-left: 8px;
+    font-size: 12px; font-weight: 800;
+    transition: width 1s cubic-bezier(.25,.8,.25,1), filter .6s;
+  }
+  .multi-row.loser .fill { filter: grayscale(.7) brightness(.7); }
+  .multi-row.winner .line span:first-child::after { content: "  🏆"; }
+  .multi-timer { text-align: center; margin-bottom: 4px; }
+
+  #banner {
+    margin-top: 10px;
+    text-align: center;
+    font-weight: 800;
+    font-size: 16px;
+    display: none;
+  }
+  #banner.on { display: block; animation: pop .5s ease; }
+  @keyframes pop { from { transform: scale(.85); opacity: 0; } to { transform: none; opacity: 1; } }
+
+  /* --- результати: списки випливають над віджетом, кожен над своєю стороною --- */
+  #results {
+    position: absolute; left: 18px; right: 18px; bottom: var(--rb, 100%);
+    display: none; grid-template-columns: 1fr 1fr; gap: 60px; pointer-events: none;
+  }
+  #results.on { display: grid; }
+  .viewport {
+    position: relative; overflow: hidden;
+    height: calc(var(--rows) * var(--rowh));
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 40%);
+            mask-image: linear-gradient(to bottom, transparent 0, #000 40%);
+  }
+  .roll { position: absolute; left: 0; right: 0; top: 0; will-change: transform; }
+  .prow { height: var(--rowh); padding: 2px 0; display: flex; }
+  .rcol.right .prow { justify-content: flex-end; }
+  .prow .pill {
+    display: inline-flex; align-items: center; gap: 14px;
+    min-width: 170px; max-width: 100%; justify-content: space-between;
+    padding: 0 9px; font-size: 14px; font-weight: 700;
+    background: rgba(10, 10, 14, .72); border-radius: 5px;
+  }
+  .rcol.right .pill { flex-direction: row-reverse; }
+  .prow .nick { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .prow .amt { white-space: nowrap; font-variant-numeric: tabular-nums; font-weight: 800; }
+  .prow.plus  .amt { color: #00e676; }
+  .prow.minus .amt { color: #ff5252; }
+
+  #status {
+    position: fixed; bottom: 6px; left: 10px;
+    font-size: 12px; color: #ff6b6b;
+    background: rgba(0,0,0,.7); padding: 4px 8px; border-radius: 6px;
+    display: none;
+  }
+  #status.on { display: block; }
+</style>
+</head>
+<body>
+  <div id="card">
+    <div id="title"></div>
+    <div id="body"></div>
+    <div id="banner"></div>
+    <div id="results"></div>
+  </div>
+  <div id="status"></div>
+
+<script>
+/* ================== CONFIG (з URL-параметрів) ==================
+   widget.html?client_id=XXX&token=YYY
+   Необов'язкові:
+     sound=URL_або_шлях_до_mp3   – свій звук на старті (інакше вбудований)
+     volume=0.0..1.0             – гучність (за замовч. 0.7)
+     hide=5                      – через скільки секунд сховати після результатів (після прокрутки списків; 0 = не ховати)
+     lock_hide=5                 – через скільки секунд сховати після закриття ставок (за таймером або вручну; 0 = не ховати)
+     lock_sound=1                – також грати звук при закритті ставок
+     demo=1                      – демо-режим без Twitch (для перевірки вигляду)
+     rows=5                      – скільки ніків видно одночасно у списках результатів
+     speed=35                    – швидкість прокрутки результатів (пікселів/сек)
+     results=0                   – вимкнути списки переможців/програвших
+================================================================= */
+const P = new URLSearchParams(location.search);
+const CFG = {
+  clientId: P.get("client_id") || "",
+  token: (P.get("token") || "").replace(/^oauth:/, ""),
+  sound: P.get("sound") || "",
+  volume: Math.min(1, Math.max(0, parseFloat(P.get("volume") ?? "0.7"))),
+  hide: parseInt(P.get("hide") ?? "5", 10),
+  lockHide: parseInt(P.get("lock_hide") ?? "5", 10),
+  lockSound: P.get("lock_sound") === "1",
+  demo: P.get("demo") === "1",
+  rows: Math.max(1, parseInt(P.get("rows") ?? "5", 10)),
+  speed: Math.max(5, parseFloat(P.get("speed") ?? "35")),
+  results: P.get("results") !== "0",
+};
+const ROW_H = 28;
+
+const DEFAULT_COLORS = ["#387aff", "#f5009b", "#00c8af", "#ff9600", "#9147ff",
+                        "#ffd37a", "#eb0400", "#00e676", "#7ed4ff", "#bfabff"];
+const POINTS_SVG = '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 6a4 4 0 0 1 4 4h-2a2 2 0 0 0-2-2V6z"/><path fill-rule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0zm-2 0a6 6 0 1 1-12 0 6 6 0 0 1 12 0z" clip-rule="evenodd"/></svg>';
+
+const $ = s => document.querySelector(s);
+const card = $("#card"), titleEl = $("#title"), bodyEl = $("#body"), bannerEl = $("#banner");
+
+let state = null;        // поточний прогноз
+let timerInt = null, hideTimeout = null, lockHideArmed = false;
+
+/* ================== ЗВУК ================== */
+let audioCtx = null;
+function playStartSound() {
+  if (CFG.sound) {
+    const a = new Audio(CFG.sound);
+    a.volume = CFG.volume;
+    a.play().catch(e => console.warn("sound:", e));
+    return;
+  }
+  // вбудований «дзинь» через Web Audio
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+    const t0 = audioCtx.currentTime;
+    const master = audioCtx.createGain();
+    master.gain.value = CFG.volume;
+    master.connect(audioCtx.destination);
+    [[659.25, 0], [783.99, 0.12], [1046.5, 0.24], [1318.5, 0.36]].forEach(([f, d]) => {
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.type = "triangle"; o.frequency.value = f;
+      g.gain.setValueAtTime(0, t0 + d);
+      g.gain.linearRampToValueAtTime(0.5, t0 + d + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, t0 + d + 0.6);
+      o.connect(g).connect(master);
+      o.start(t0 + d); o.stop(t0 + d + 0.65);
+    });
+  } catch (e) { console.warn(e); }
+}
+
+/* ================== UI ================== */
+const fmt = n => {
+  n = n || 0;
+  if (n >= 1e6) return (n / 1e6).toFixed(n >= 1e7 ? 0 : 1).replace(/\.0$/, "") + "M";
+  if (n >= 1e4) return (n / 1e3).toFixed(n >= 1e5 ? 0 : 1).replace(/\.0$/, "") + "K";
+  return n.toLocaleString("uk-UA");
+};
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const colorOf = (o, i, total) => {
+  // Twitch дає "blue"/"pink" для 2 варіантів; для 3+ — всі "blue", тому беремо палітру
+  if (total === 2) return o.color?.toLowerCase() === "pink" ? "#f5009b" : (i === 0 ? "#387aff" : "#f5009b");
+  return DEFAULT_COLORS[i % DEFAULT_COLORS.length];
+};
+
+function percents(outs) {
+  const total = outs.reduce((s, o) => s + (o.channel_points || 0), 0);
+  if (!total) return outs.map(() => 100 / outs.length);
+  return outs.map(o => (o.channel_points || 0) / total * 100);
+}
+function ratios(outs) {
+  const total = outs.reduce((s, o) => s + (o.channel_points || 0), 0);
+  return outs.map(o => o.channel_points ? (total / o.channel_points).toFixed(2) + "x" : "—");
+}
+
+function timerText() {
+  if (!state) return "";
+  if (state.status === "canceled") return "Скасовано";
+  if (state.status === "resolved") return "Завершено";
+  if (state.status === "locked") return "Ставки закрито";
+  const ms = new Date(state.locks_at) - Date.now();
+  if (ms <= 0) return "00:00";
+  const s = Math.ceil(ms / 1000);
+  return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
+}
+function timerClass() {
+  return { locked: "locked", resolved: "ended", canceled: "canceled" }[state?.status] || "";
+}
+
+/* ---------- плавна анімація чисел ---------- */
+const TWEEN_MS = 900;
+let tw = {};                 // key -> {from, to, t0}
+let lastPc = null, lastKey = "", rafOn = false;
+const easeOut = t => 1 - Math.pow(1 - t, 3);
+const FMT = {
+  pts: v => fmt(Math.round(v)),
+  int: v => fmt(Math.round(v)),
+  pct: v => String(Math.round(v)),
+  ratio: v => v > 0 ? v.toFixed(2) + "x" : "—",
+};
+function twVal(k, now = performance.now()) {
+  const t = tw[k]; if (!t) return 0;
+  const p = Math.min(1, (now - t.t0) / TWEEN_MS);
+  return t.from + (t.to - t.from) * easeOut(p);
+}
+function tweenTo(k, target) {
+  const now = performance.now();
+  if (!tw[k]) { tw[k] = { from: target, to: target, t0: now }; return; }
+  if (tw[k].to === target) return;
+  tw[k] = { from: twVal(k, now), to: target, t0: now };
+  if (!rafOn) { rafOn = true; requestAnimationFrame(twLoop); }
+}
+function paintTweens(now = performance.now()) {
+  bodyEl.querySelectorAll("[data-tw]").forEach(el => {
+    el.textContent = FMT[el.dataset.f](twVal(el.dataset.tw, now));
+  });
+}
+function twLoop(now) {
+  paintTweens(now);
+  const busy = Object.values(tw).some(t => now - t.t0 < TWEEN_MS);
+  if (busy) requestAnimationFrame(twLoop); else rafOn = false;
+}
+
+/* ---------- побудова структури (лише коли змінюється стан прогнозу) ---------- */
+function build(outs) {
+  const done = state.status === "resolved";
+  const cls = o => done ? (o.id === state.winning_outcome_id ? "winner" : "loser") : "";
+  const startPc = lastPc && lastPc.length === outs.length ? lastPc : percents(outs);
+  if (outs.length === 2) {
+    const [a, b] = outs;
+    const ca = colorOf(a, 0, 2), cb = colorOf(b, 1, 2);
+    const chip = (o, i, c) => `
+          <div class="stats ${cls(o) === "winner" ? "won" : ""}" style="--c:${c}">
+            <span class="ratio" data-tw="r${i}" data-f="ratio"></span>
+            <span class="pts">${POINTS_SVG}<span data-tw="p${i}" data-f="pts"></span></span>
+            ${cls(o) === "winner" ? '<span class="winflag">Winner!</span>' : ""}
+          </div>`;
+    bodyEl.innerHTML = `
+      <div class="duo-head">
+        <div class="side left"><div class="oname">${esc(a.title)}</div>${chip(a, 0, ca)}</div>
+        <div id="timer" class="${timerClass()}">${timerText()}</div>
+        <div class="side right"><div class="oname">${esc(b.title)}</div>${chip(b, 1, cb)}</div>
+      </div>
+      <div class="bar">
+        <div class="seg ${cls(a)}" data-seg="0" style="flex-basis:${startPc[0]}%;background:${ca}"><span data-tw="c0" data-f="pct"></span><small>%</small></div>
+        <div class="seg r ${cls(b)}" data-seg="1" style="flex-basis:${startPc[1]}%;background:${cb}"><span data-tw="c1" data-f="pct"></span><small>%</small></div>
+      </div>`;
+  } else {
+    bodyEl.innerHTML = `<div id="timer" class="multi-timer ${timerClass()}">${timerText()}</div>` +
+      outs.map((o, i) => `<div class="multi-row ${cls(o)}">
+          <div class="line"><span>${esc(o.title)}</span>
+            <span class="meta"><span data-tw="p${i}" data-f="pts"></span> балів · 👤 <span data-tw="u${i}" data-f="int"></span> · <span data-tw="r${i}" data-f="ratio"></span></span></div>
+          <div class="track"><div class="fill" data-seg="${i}" style="width:${Math.max(startPc[i], 2)}%;background:${colorOf(o, i, outs.length)}"><span data-tw="c${i}" data-f="pct"></span>%</div></div>
+        </div>`).join("");
+  }
+  paintTweens();
+  void bodyEl.offsetWidth; // зафіксувати стартову ширину, щоб transition спрацював
+}
+
+function render() {
+  if (!state) return;
+  const outs = state.outcomes;
+  const done = state.status === "resolved";
+  titleEl.textContent = state.title;
+
+  const key = [state.id, outs.length, state.status, state.winning_outcome_id || ""].join("|");
+  if (key !== lastKey) {
+    if (!lastKey.startsWith(state.id + "|")) { tw = {}; lastPc = null; } // новий прогноз
+    lastKey = key;
+    build(outs);
+  }
+
+  // плавно оновлюємо значення
+  const pc = percents(outs);
+  const total = outs.reduce((s, o) => s + (o.channel_points || 0), 0);
+  outs.forEach((o, i) => {
+    tweenTo("p" + i, o.channel_points || 0);
+    tweenTo("u" + i, o.users || 0);
+    tweenTo("r" + i, o.channel_points ? total / o.channel_points : 0);
+    tweenTo("c" + i, pc[i]);
+    const seg = bodyEl.querySelector(`[data-seg="${i}"]`);
+    if (seg) {
+      if (outs.length === 2) seg.style.flexBasis = pc[i] + "%";
+      else seg.style.width = Math.max(pc[i], 2) + "%";
+    }
+  });
+  lastPc = pc;
+  paintTweens();
+
+  if (done && outs.length === 2) {
+    bannerEl.className = "";
+  } else if (done) {
+    const w = outs.find(o => o.id === state.winning_outcome_id);
+    bannerEl.textContent = w ? `🏆 Переміг варіант: ${w.title}` : "Прогноз завершено";
+    bannerEl.className = "on";
+  } else if (state.status === "canceled") {
+    bannerEl.textContent = "Прогноз скасовано — бали повернуто";
+    bannerEl.className = "on";
+  } else {
+    bannerEl.className = "";
+  }
+}
+
+/* ================== РЕЗУЛЬТАТИ ================== */
+const resultsEl = document.getElementById("results");
+let rollAnims = [];
+
+function rowsFor(o) {
+  const won = o.id === state.winning_outcome_id;
+  return (o.top_predictors || []).map(t => ({
+    nick: t.user_name || t.user_login,
+    amt: won ? (t.channel_points_won || 0) : (t.channel_points_used || 0),
+    plus: won,
+  })).sort((a, b) => b.amt - a.amt);
+}
+
+function columnHTML(side, list) {
+  const rows = list.map(r => `<div class="prow ${r.plus ? "plus" : "minus"}"><div class="pill">
+      <span class="nick">${esc(r.nick)}</span>
+      <span class="amt">${r.plus ? "+" : "−"}${fmt(r.amt)}</span></div></div>`).join("");
+  return `<div class="rcol ${side}"><div class="viewport" style="--rows:${CFG.rows};--rowh:${ROW_H}px">
+      ${list.length ? `<div class="roll">${rows}</div>` : ""}</div></div>`;
+}
+
+function clearResults() {
+  rollAnims.forEach(a => a.cancel()); rollAnims = [];
+  resultsEl.className = ""; resultsEl.innerHTML = "";
+  card.classList.remove("rolling");
+}
+
+// повертає тривалість прокрутки в мс
+function showResults() {
+  clearResults();
+  if (!CFG.results || state.status !== "resolved") return 0;
+  const outs = state.outcomes;
+  let left, right;
+  if (outs.length === 2) {
+    // кожен список над своєю стороною
+    left = rowsFor(outs[0]); right = rowsFor(outs[1]);
+  } else {
+    // 3+ варіантів: зліва переможці, справа всі, хто програв
+    left = rowsFor(outs.find(o => o.id === state.winning_outcome_id) || { top_predictors: [] });
+    right = outs.filter(o => o.id !== state.winning_outcome_id).flatMap(rowsFor).sort((a, b) => b.amt - a.amt).slice(0, 10);
+  }
+  if (!left.length && !right.length) return 0;
+  resultsEl.innerHTML = columnHTML("left", left) + columnHTML("right", right);
+
+  // нижній край списків — рівно над назвами варіантів
+  const anchor = bodyEl.querySelector(".duo-head") || bodyEl;
+  resultsEl.style.setProperty("--rb", (card.offsetHeight - anchor.offsetTop + 4) + "px");
+  resultsEl.className = "on";
+  card.classList.add("rolling");
+
+  const vpH = CFG.rows * ROW_H;
+  let maxDur = 0;
+  resultsEl.querySelectorAll(".roll").forEach(roll => {
+    const listH = roll.children.length * ROW_H;
+    const dur = (vpH + listH) / CFG.speed * 1000;
+    maxDur = Math.max(maxDur, dur);
+    rollAnims.push(roll.animate(
+      [{ transform: `translateY(${vpH}px)` }, { transform: `translateY(${-listH}px)` }],
+      { duration: dur, easing: "linear", fill: "forwards", delay: 600 }
+    ));
+  });
+  setTimeout(() => card.classList.remove("rolling"), maxDur + 600);
+  return maxDur + 600;
+}
+
+function tickTimer() {
+  // час вийшов, а подія lock від Twitch ще не прийшла — все одно ховаємо
+  if (state?.status === "active" && new Date(state.locks_at) - Date.now() <= 0) scheduleLockHide();
+  const t = document.getElementById("timer");
+  if (t) { t.textContent = timerText(); t.className = (t.classList.contains("multi-timer") ? "multi-timer " : "") + timerClass(); }
+}
+
+function show() {
+  clearTimeout(hideTimeout);
+  card.classList.add("show");
+  clearInterval(timerInt);
+  timerInt = setInterval(tickTimer, 250);
+}
+function hideNow() {
+  card.classList.remove("show");
+  clearInterval(timerInt);
+}
+// після результатів: дочекатися кінця прокрутки списків + hide секунд
+function scheduleHide(extraMs = 0) {
+  clearTimeout(hideTimeout);
+  if (CFG.hide > 0) hideTimeout = setTimeout(hideNow, extraMs + CFG.hide * 1000);
+}
+// після закриття ставок (вручну чи за таймером) — один раз на прогноз
+function scheduleLockHide() {
+  if (lockHideArmed || CFG.lockHide <= 0) return;
+  lockHideArmed = true;
+  clearTimeout(hideTimeout);
+  hideTimeout = setTimeout(hideNow, CFG.lockHide * 1000);
+}
+
+/* ================== ОБРОБКА ПОДІЙ ================== */
+function mergeOutcomes(newOuts) {
+  // зберігаємо порядок і кольори з початкових даних
+  const old = state?.outcomes || [];
+  return newOuts.map(n => {
+    const o = old.find(x => x.id === n.id) || {};
+    return { ...o, ...n, users: n.users ?? o.users ?? 0, channel_points: n.channel_points ?? o.channel_points ?? 0 };
+  });
+}
+
+function onBegin(ev, silent = false) {
+  state = {
+    id: ev.id, title: ev.title, status: "active",
+    locks_at: ev.locks_at,
+    outcomes: ev.outcomes.map(o => ({ ...o, users: o.users || 0, channel_points: o.channel_points || 0 })),
+  };
+  lockHideArmed = false;
+  clearResults();
+  render(); show();
+  if (!silent) playStartSound();
+}
+function onProgress(ev) {
+  if (!state || state.id !== ev.id) { onBegin(ev, true); }
+  state.outcomes = mergeOutcomes(ev.outcomes);
+  state.locks_at = ev.locks_at || state.locks_at;
+  render();
+}
+function onLock(ev) {
+  if (!state || state.id !== ev.id) onBegin(ev, true);
+  state.outcomes = mergeOutcomes(ev.outcomes);
+  state.status = "locked";
+  render();
+  scheduleLockHide();
+  if (CFG.lockSound) playStartSound();
+}
+function onEnd(ev) {
+  if (!state || state.id !== ev.id) onBegin(ev, true);
+  state.outcomes = mergeOutcomes(ev.outcomes);
+  state.status = ev.status === "canceled" ? "canceled" : "resolved";
+  state.winning_outcome_id = ev.winning_outcome_id;
+  render(); show();
+  const rollMs = showResults();
+  scheduleHide(rollMs);
+}
+
+/* ================== TWITCH ================== */
+function setStatus(msg) {
+  const s = $("#status");
+  s.textContent = msg || "";
+  s.classList.toggle("on", !!msg);
+}
+async function helix(path, opts = {}) {
+  const r = await fetch("https://api.twitch.tv/helix/" + path, {
+    ...opts,
+    headers: { "Authorization": "Bearer " + CFG.token, "Client-Id": CFG.clientId,
+               "Content-Type": "application/json", ...(opts.headers || {}) },
+  });
+  if (!r.ok) throw new Error(`Helix ${path}: ${r.status} ${await r.text()}`);
+  return r.status === 204 ? null : r.json();
+}
+
+let broadcasterId = null;
+
+async function validateToken() {
+  const r = await fetch("https://id.twitch.tv/oauth2/validate", { headers: { Authorization: "OAuth " + CFG.token } });
+  if (!r.ok) throw new Error("Токен недійсний або прострочений — згенеруйте новий у setup.html");
+  const j = await r.json();
+  if (!j.scopes?.includes("channel:read:predictions") && !j.scopes?.includes("channel:manage:predictions"))
+    throw new Error("Токену бракує дозволу channel:read:predictions");
+  return j.user_id;
+}
+
+async function loadCurrent() {
+  try {
+    const j = await helix(`predictions?broadcaster_id=${broadcasterId}&first=1`);
+    const p = j.data?.[0];
+    if (!p) return;
+    const outs = p.outcomes.map(o => ({ id: o.id, title: o.title, color: o.color,
+      users: o.users, channel_points: o.channel_points }));
+    if (p.status === "ACTIVE" || p.status === "LOCKED") {
+      const locks = new Date(new Date(p.created_at).getTime() + p.prediction_window * 1000).toISOString();
+      onBegin({ id: p.id, title: p.title, outcomes: outs, locks_at: locks }, true);
+      // ставки вже закриті — не показуємо, чекаємо на результат
+      if (p.status === "LOCKED") { state.status = "locked"; render(); lockHideArmed = true; hideNow(); }
+    }
+  } catch (e) { console.warn(e); }
+}
+
+const TYPES = ["channel.prediction.begin", "channel.prediction.progress",
+               "channel.prediction.lock", "channel.prediction.end"];
+
+function connect(url = "wss://eventsub.wss.twitch.tv/ws", isReconnect = false) {
+  const ws = new WebSocket(url);
+  let keepaliveTimer = null, keepaliveSec = 10;
+  const resetKeepalive = () => {
+    clearTimeout(keepaliveTimer);
+    keepaliveTimer = setTimeout(() => { ws.close(); }, (keepaliveSec + 5) * 1000);
+  };
+
+  ws.onmessage = async (m) => {
+    const msg = JSON.parse(m.data);
+    const type = msg.metadata?.message_type;
+    resetKeepalive();
+
+    if (type === "session_welcome") {
+      keepaliveSec = msg.payload.session.keepalive_timeout_seconds || 10;
+      setStatus("");
+      if (isReconnect) return; // підписки переносяться автоматично
+      const sid = msg.payload.session.id;
+      try {
+        for (const t of TYPES) {
+          await helix("eventsub/subscriptions", { method: "POST", body: JSON.stringify({
+            type: t, version: "1",
+            condition: { broadcaster_user_id: broadcasterId },
+            transport: { method: "websocket", session_id: sid },
+          })});
+        }
+        console.log("EventSub: підписано на прогнози");
+      } catch (e) { setStatus(e.message); console.error(e); }
+    }
+    else if (type === "session_reconnect") {
+      const newWs = connect(msg.payload.session.reconnect_url, true);
+      newWs.addEventListener("open", () => { ws.onclose = null; ws.close(); }, { once: true });
+    }
+    else if (type === "notification") {
+      const st = msg.metadata.subscription_type, ev = msg.payload.event;
+      if (st.endsWith(".begin")) onBegin(ev);
+      else if (st.endsWith(".progress")) onProgress(ev);
+      else if (st.endsWith(".lock")) onLock(ev);
+      else if (st.endsWith(".end")) onEnd(ev);
+    }
+    else if (type === "revocation") {
+      setStatus("Підписку відкликано: " + msg.payload.subscription.status);
+    }
+  };
+  ws.onclose = () => {
+    clearTimeout(keepaliveTimer);
+    setStatus("Зʼєднання з Twitch втрачено, перепідключення…");
+    setTimeout(() => { connect(); loadCurrent(); }, 3000);
+  };
+  return ws;
+}
+
+/* ================== ДЕМО ================== */
+function runDemo() {
+  const id = "demo";
+  const locks = () => new Date(Date.now() + 30000).toISOString();
+  const outs = [{ id: "a", title: "Ваш найкращий стрімер", color: "blue" },
+                { id: "b", title: "Противники", color: "pink" }];
+  let A = 0, B = 0, uA = 0, uB = 0;
+  const cycle = () => {
+    A = B = uA = uB = 0;
+    onBegin({ id, title: "Nuke Хто переможе на цій мапі?", outcomes: outs, locks_at: locks() });
+    const iv = setInterval(() => {
+      if (Math.random() < .5) { A += Math.floor(Math.random() * 3000); uA++; }
+      else { B += Math.floor(Math.random() * 2500); uB++; }
+      onProgress({ id, outcomes: [{ id: "a", users: uA, channel_points: A }, { id: "b", users: uB, channel_points: B }] });
+    }, 1200);
+    setTimeout(() => { clearInterval(iv); onLock({ id, outcomes: state.outcomes }); }, 30000);
+    setTimeout(() => {
+      const win = A >= B ? "a" : "b";
+      const nicks = ["Shadow_UA","kozak_pro","MaksymTTV","ne_tilt","Lviv_Gamer","bandera_aim","SonyaPlays",
+                     "dnipro_1337","Kotyk","OlehFrag","zhenya_kz","pivo_i_cs","Hetman","Vovchyk","ira_snipe",
+                     "taras_b","noobmaster","Kharkiv_one","duster","anya_cat"];
+      const tops = (oid, pool, k) => pool.slice(0, 10).map(n => {
+        const used = 200 + Math.floor(Math.random() * 5000);
+        return { user_name: n, channel_points_used: used, channel_points_won: oid === win ? Math.round(used * k) : null };
+      });
+      const tot = A + B, kA = A ? tot / A : 2, kB = B ? tot / B : 2;
+      const outsEnd = state.outcomes.map(o => ({ ...o,
+        top_predictors: o.id === "a" ? tops("a", nicks.slice(0, 10), kA) : tops("b", nicks.slice(10), kB) }));
+      onEnd({ id, status: "resolved", winning_outcome_id: win, outcomes: outsEnd });
+    }, 40000);
+    setTimeout(cycle, 40000 + 22000);
+  };
+  cycle();
+}
+
+/* ================== СТАРТ ================== */
+(async () => {
+  if (CFG.demo) return runDemo();
+  if (!CFG.clientId || !CFG.token) {
+    setStatus("Не вказано client_id і token — відкрийте setup.html");
+    return;
+  }
+  try {
+    broadcasterId = await validateToken();
+    await loadCurrent();
+    connect();
+  } catch (e) { setStatus(e.message); console.error(e); }
+})();
+</script>
+</body>
+</html>

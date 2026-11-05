@@ -1,0 +1,19 @@
+# Локальні файли з токенами / згенерованими посиланнями — НЕ комітити
+*.local.html
+*.local.txt
+obs-url*.txt
+.env
+
+# Власні звуки (за бажанням)
+sounds/*.local.*
+
+# Python / тести
+__pycache__/
+*.pyc
+.venv/
+
+# Системне
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
