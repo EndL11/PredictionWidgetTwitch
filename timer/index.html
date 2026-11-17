@@ -67,7 +67,7 @@
 <script>
 /* ================== CONFIG ==================
    Режими (один з трьох):
-     timer/#channel=<логін>     – керування з чату: !timer start | pause | stop (або !таймер старт | пауза | стоп).
+     timer/#channel=<логін>     – керування з чату: !timer start | pause | stop | reset (або !таймер старт | пауза | стоп | скинути).
                                   Команди приймаються лише від стрімера й модераторів. Стан зберігається
                                   в localStorage OBS і переживає перезапуск ПК/OBS/стріму.
      timer/#start=<unix ms>     – рахує вгору від цього моменту
@@ -103,7 +103,7 @@ function load() {
 const save = s => localStorage.setItem(KEY, JSON.stringify(s));
 const elapsed = (s, now) => s.base + (s.status === "running" ? now - s.since : 0);
 
-// публічна: викликається з чату і з тестів. cmd: start|pause|stop
+// публічна: викликається з чату і з тестів. cmd: start|pause|stop|reset
 function command(cmd, now = Date.now()) {
   const s = load();
   if (cmd === "start") {
@@ -116,11 +116,13 @@ function command(cmd, now = Date.now()) {
   } else if (cmd === "stop") {
     if (s.status !== "running" && s.status !== "paused") return s;
     save({ status: "stopped", base: elapsed(s, now), since: 0 });
+  } else if (cmd === "reset") {
+    save({ ...IDLE }); // 00:00:00 і чекаємо на старт
   }
   return load();
 }
 
-const CMDS = { start: "start", "старт": "start", pause: "pause", "пауза": "pause", stop: "stop", "стоп": "stop" };
+const CMDS = { start: "start", "старт": "start", pause: "pause", "пауза": "pause", stop: "stop", "стоп": "stop", reset: "reset", "скинути": "reset" };
 // tags — IRC-теги Twitch (їх ставить сервер, підробити не можна)
 function onChat(tags, text) {
   const m = text.trim().toLowerCase().match(/^!(?:timer|таймер)\s+(\S+)/);
