@@ -4,93 +4,189 @@
 <meta charset="UTF-8">
 <meta name="referrer" content="no-referrer">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src https://id.twitch.tv; base-uri 'none'; form-action 'none'">
-<title>Налаштування віджета прогнозів</title>
+<title>StreamerTools — налаштування</title>
 <style>
   body { font-family: "Segoe UI", Roboto, Arial, sans-serif; background: #0e0e10; color: #efeff1;
-         max-width: 760px; margin: 30px auto; padding: 0 20px; line-height: 1.5; }
-  h1 { font-size: 24px; } h2 { font-size: 18px; margin-top: 28px; color: #bf94ff; }
-  input, button { font: inherit; padding: 9px 12px; border-radius: 6px; border: 1px solid #3a3a3d; }
-  input { width: 100%; background: #18181b; color: #fff; box-sizing: border-box; }
+         max-width: 820px; margin: 0 auto; padding: 0 20px 40px; line-height: 1.5; }
+  header { display: flex; align-items: baseline; gap: 14px; padding: 26px 0 8px; }
+  header h1 { font-size: 28px; margin: 0; letter-spacing: .01em; }
+  header h1 span { background: linear-gradient(90deg, #ffd166, #ff8a3d 35%, #ff2e88 70%, #b14dff);
+                   -webkit-background-clip: text; background-clip: text; color: transparent; }
+  header small { color: #adadb8; }
+  nav { display: flex; gap: 4px; border-bottom: 1px solid #2f2f35; margin: 12px 0 20px; flex-wrap: wrap; }
+  nav a { color: #adadb8; text-decoration: none; padding: 10px 14px; border-bottom: 2px solid transparent; font-weight: 600; }
+  nav a:hover { color: #fff; }
+  nav a.on { color: #fff; border-bottom-color: #9147ff; }
+  section { display: none; } section.on { display: block; }
+  h2 { font-size: 18px; margin-top: 28px; color: #bf94ff; }
+  input, button, select { font: inherit; padding: 9px 12px; border-radius: 6px; border: 1px solid #3a3a3d; }
+  input, select { width: 100%; background: #18181b; color: #fff; box-sizing: border-box; }
+  input[type=checkbox] { width: auto; margin-top: 12px; }
   button { background: #9147ff; color: #fff; border: none; cursor: pointer; font-weight: 600; margin-top: 8px; }
   button:hover { background: #772ce8; }
   label { display: block; margin-top: 12px; font-size: 14px; color: #adadb8; }
   code { background: #26262c; padding: 2px 6px; border-radius: 4px; }
+  a { color: #bf94ff; }
   .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; align-items: end; }
-  #out { word-break: break-all; background: #18181b; padding: 12px; border-radius: 6px; border: 1px solid #3a3a3d; display:none; }
+  .out { word-break: break-all; background: #18181b; padding: 12px; border-radius: 6px; border: 1px solid #3a3a3d; display: none; margin-top: 12px; }
   .ok { color: #00e676; } .err { color: #ff6b6b; }
+  .muted { color: #adadb8; font-size: 13px; }
   ol li { margin-bottom: 6px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+  .card { background: #18181b; border: 1px solid #2f2f35; border-radius: 10px; padding: 18px; }
+  .card h3 { margin: 0 0 6px; font-size: 18px; }
+  .card p { margin: 0 0 12px; color: #c8c8d0; font-size: 14px; }
+  .card a.btn { display: inline-block; background: #9147ff; color: #fff; text-decoration: none; padding: 8px 14px; border-radius: 6px; font-weight: 600; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  td { border-top: 1px solid #2f2f35; padding: 6px 8px; vertical-align: top; }
 </style>
 </head>
 <body>
-<h1>Віджет прогнозів Twitch для OBS — налаштування</h1>
+<header><h1><span>StreamerTools</span></h1><small>віджети для OBS і Twitch, без сервера</small></header>
+<nav>
+  <a href="#overview" data-tab="overview">Огляд</a>
+  <a href="#predictions" data-tab="predictions">Прогнози</a>
+  <a href="#timer" data-tab="timer">Таймер марафону</a>
+</nav>
 
-<h2>1. Створіть Twitch-застосунок (один раз)</h2>
-<ol>
-  <li>Відкрийте <a href="https://dev.twitch.tv/console/apps/create" target="_blank" rel="noopener noreferrer" style="color:#bf94ff">dev.twitch.tv/console/apps/create</a> (потрібна двофакторна автентифікація на акаунті).</li>
-  <li>Name — будь-яка назва, наприклад <code>MyPredictionWidget</code>.</li>
-  <li>OAuth Redirect URLs: <code id="ru"></code> (точно так, разом зі слешем в кінці).</li>
-  <li>Category: <code>Broadcaster Suite</code>, Client Type: <code>Public</code>.</li>
-  <li>Збережіть і скопіюйте <b>Client ID</b>.</li>
-</ol>
+<!-- ===================== ОГЛЯД ===================== -->
+<section id="tab-overview">
+  <p>Набір віджетів для стріму. Кожен — це посилання, яке додається в OBS як джерело «Браузер». Налаштування й генерація посилань — на вкладках вище.</p>
+  <div class="cards">
+    <div class="card">
+      <h3>Прогнози</h3>
+      <p>Показує прогнози за бали каналу в реальному часі: ставки, коефіцієнти, таймер, звук на старті, переможця і списки найбільших виграшів і програшів. Стилі GTA 6, HUD і стандартний.</p>
+      <a class="btn" href="#predictions">Налаштувати</a>
+    </div>
+    <div class="card">
+      <h3>Таймер марафону</h3>
+      <p>Напис «МАРАФОН GTA VI» і час до секунди (з днями). Стартує, ставиться на паузу й зупиняється командами в чаті. Не скидається після перезапуску ПК чи OBS.</p>
+      <a class="btn" href="#timer">Налаштувати</a>
+    </div>
+  </div>
+  <h2>Як додати віджет в OBS</h2>
+  <ol>
+    <li>Джерела → <b>+</b> → <b>Браузер</b>, зніміть галочку «Локальний файл», вставте посилання.</li>
+    <li>Розмір <code>1920×1080</code>. Віджет розтягнеться під джерело, далі зменшуйте рамкою.</li>
+    <li>Для шрифту в стилі GTA встановіть Pricedown у Windows (інструкція в репозиторії, <code>fonts/README.md</code>) і перезапустіть OBS.</li>
+  </ol>
+</section>
 
-<label>Client ID</label>
-<input id="cid" placeholder="наприклад: gp762nuuoqcoxypju8c569th9wz7q5">
-<button id="login">Увійти через Twitch і отримати токен</button>
+<!-- ===================== ПРОГНОЗИ ===================== -->
+<section id="tab-predictions">
+  <h2>1. Створіть Twitch-застосунок (один раз)</h2>
+  <ol>
+    <li>Відкрийте <a href="https://dev.twitch.tv/console/apps/create" target="_blank" rel="noopener noreferrer">dev.twitch.tv/console/apps/create</a> (потрібна двофакторна автентифікація на акаунті).</li>
+    <li>Name — будь-яка назва, наприклад <code>MyStreamerTools</code>.</li>
+    <li>OAuth Redirect URLs: <code id="ru"></code> (точно так, разом зі слешем в кінці).</li>
+    <li>Category: <code>Broadcaster Suite</code>, Client Type: <code>Public</code>.</li>
+    <li>Збережіть і скопіюйте <b>Client ID</b>.</li>
+  </ol>
+  <label>Client ID</label>
+  <input id="cid" placeholder="наприклад: gp762nuuoqcoxypju8c569th9wz7q5">
+  <button id="login">Увійти через Twitch і отримати токен</button>
 
-<h2>2. Вставте адресу після входу</h2>
-<p id="redirHint">Якщо сторінку відкрито через https, після входу Twitch поверне вас сюди і поле заповниться само. Якщо локально: браузер відкриє <code>http://localhost/#access_token=…</code> з помилкою «не вдається відкрити сайт», це нормально. Скопіюйте <b>всю адресу</b> з адресного рядка й вставте сюди:</p>
-<input id="redir" placeholder="http://localhost/#access_token=...&scope=...">
+  <h2>2. Токен</h2>
+  <p class="muted">Якщо сторінку відкрито через https, після входу Twitch поверне вас сюди і поле заповниться само. Якщо локально: браузер відкриє <code>http://localhost/#access_token=…</code> з помилкою, це нормально. Скопіюйте <b>всю адресу</b> з адресного рядка й вставте сюди:</p>
+  <input id="redir" placeholder="http://localhost/#access_token=...&scope=...">
 
-<h2>3. Додаткові параметри (необовʼязково)</h2>
-<label>Свій звук на старті (шлях до mp3/wav або URL; порожньо — вбудований дзвіночок)</label>
-<input id="sound" placeholder="наприклад: file:///C:/Stream/sounds/start.mp3">
-<div class="row">
-  <div><label>Гучність (0–1)</label><input id="vol" value="0.7"></div>
-  <div><label>Сховати після результатів, сек (0 = ні)</label><input id="hide" value="5"></div>
-  <div><label>Сховати після закриття ставок, сек (0 = ні)</label><input id="lockhide" value="5"></div>
-  <div><label>Звук і при закритті ставок</label><input id="lock" type="checkbox" style="width:auto;margin-top:12px"></div>
-</div>
-<div class="row">
-  <div><label>Ніків на екрані у списках</label><input id="rows" value="5"></div>
-  <div><label>Швидкість прокрутки (px/с)</label><input id="speed" value="35"></div>
-  <div><label>Тема</label><select id="theme" style="font:inherit;padding:9px 12px;border-radius:6px;background:#18181b;color:#fff;border:1px solid #3a3a3d;width:100%"><option value="">Стандартна</option><option value="vice">Vice (неоновий захід сонця)</option><option value="slant">Vice косий (усе під одним нахилом)</option><option value="hud">HUD (класичний ігровий)</option></select></div>
-  <div><label>Показувати списки</label><input id="res" type="checkbox" checked style="width:auto;margin-top:12px"></div>
-</div>
-<button id="make">Згенерувати посилання для OBS</button>
-<p id="msg"></p>
-<div id="out"></div>
-<button id="copy" style="display:none">Скопіювати</button>
+  <h2>3. Вигляд і поведінка</h2>
+  <div class="row">
+    <div><label>Стиль</label><select id="theme">
+      <option value="vice">GTA 6 (неон Vice)</option>
+      <option value="slant">GTA 6 косий</option>
+      <option value="hud">HUD (класичний ігровий)</option>
+      <option value="">Стандартний Twitch</option>
+    </select></div>
+    <div><label>Ніків на екрані у списках</label><input id="rows" value="5"></div>
+    <div><label>Швидкість прокрутки (px/с)</label><input id="speed" value="35"></div>
+    <div><label>Показувати списки</label><input id="res" type="checkbox" checked></div>
+  </div>
+  <div class="row">
+    <div><label>Сховати після закриття ставок, с (0 = ні)</label><input id="lockhide" value="5"></div>
+    <div><label>Сховати після результатів, с (0 = ні)</label><input id="hide" value="5"></div>
+    <div><label>Гучність (0–1)</label><input id="vol" value="0.7"></div>
+    <div><label>Звук і при закритті ставок</label><input id="lock" type="checkbox"></div>
+  </div>
+  <label>Свій звук на старті (шлях до mp3/wav або URL; порожньо — вбудований дзвіночок)</label>
+  <input id="sound" placeholder="наприклад: file:///C:/Stream/sounds/start.mp3">
 
-<h2>4. Додайте в OBS</h2>
-<ol>
-  <li>Джерела → <b>+</b> → <b>Браузер</b>.</li>
-  <li>Зніміть галочку «Локальний файл», у поле URL вставте посилання вище.</li>
-  <li>Ширина <code>1920</code>, висота <code>1080</code>. Віджет сам розтягнеться під джерело; щоб зменшити, просто зменшіть джерело рамкою в OBS.</li>
-  <li>Увімкніть <b>«Керувати аудіо через OBS»</b>, щоб звук ішов у мікшер і на стрім.</li>
-</ol>
-<p>Перевірити вигляд без Twitch: відкрийте <code>widget/#demo=1</code>.</p>
-<p style="color:#adadb8;font-size:13px">Токен живе приблизно 60 днів. Коли віджет напише «Токен недійсний», просто повторіть кроки 1–3 (застосунок створювати знову не треба). Нікому не показуйте посилання — у ньому ваш токен.</p>
+  <button id="make">Згенерувати посилання для OBS</button>
+  <p id="msg"></p>
+  <div id="out" class="out"></div>
+  <button id="copy" style="display:none">Скопіювати</button>
+  <p class="muted">Перевірити вигляд без Twitch: <a id="demo" target="_blank" rel="noopener">демо віджета</a>. Увімкніть в OBS <b>«Керувати аудіо через OBS»</b>, щоб звук ішов на стрім.<br>
+  Токен живе приблизно 60 днів. Коли віджет напише «Токен недійсний», повторіть кроки 1–3. Нікому не показуйте посилання — у ньому ваш токен.</p>
+</section>
+
+<!-- ===================== ТАЙМЕР ===================== -->
+<section id="tab-timer">
+  <h2>1. Канал і вигляд</h2>
+  <div class="row">
+    <div><label>Логін каналу на Twitch</label><input id="t-channel" placeholder="наприклад: mystreamer"></div>
+    <div><label>Напис зверху</label><input id="t-title" value="МАРАФОН GTA VI" maxlength="60"></div>
+    <div><label>Стиль</label><select id="t-theme">
+      <option value="vice">GTA 6 (неон Vice)</option>
+      <option value="sa">San Andreas (білий з контуром)</option>
+      <option value="hud">HUD (класичний ігровий)</option>
+    </select></div>
+  </div>
+  <label>Режим</label>
+  <select id="t-mode">
+    <option value="chat">Керування з чату: старт, пауза, стоп</option>
+    <option value="start">Від фіксованого часу старту (рахує вгору)</option>
+    <option value="end">До фіксованого часу кінця (зворотний відлік)</option>
+  </select>
+  <div id="t-when-box" style="display:none"><label id="t-when-l">Час старту</label><input id="t-when" type="datetime-local" step="1"></div>
+
+  <button id="t-make">Згенерувати посилання для OBS</button>
+  <p id="t-msg"></p>
+  <div id="t-out" class="out"></div>
+  <button id="t-copy" style="display:none">Скопіювати</button>
+
+  <h2>2. Команди в чаті</h2>
+  <p class="muted">Працюють лише від стрімера й модераторів каналу. Віджет читає чат анонімно, токен не потрібен.</p>
+  <table>
+    <tr><td><code>!timer start</code> або <code>!таймер старт</code></td><td>Запустити. З паузи — продовжити. Після стопу — новий відлік з нуля.</td></tr>
+    <tr><td><code>!timer pause</code> або <code>!таймер пауза</code></td><td>Пауза: час не рахується, цифри блимають.</td></tr>
+    <tr><td><code>!timer stop</code> або <code>!таймер стоп</code></td><td>Зупинити й заморозити підсумковий час.</td></tr>
+  </table>
+  <p class="muted">Стан зберігається в OBS, тож таймер не скидається після перезапуску ПК, OBS чи стріму і продовжує рахувати час, поки був вимкнений ПК (якщо не на паузі). Команди, надіслані, коли OBS закритий, не дійдуть: віджет бачить лише нові повідомлення.</p>
+</section>
 
 <script>
 const $ = id => document.getElementById(id);
+
+/* ---------- вкладки ---------- */
+function showTab(name) {
+  if (!$("tab-" + name)) name = "overview";
+  document.querySelectorAll("section").forEach(s => s.classList.toggle("on", s.id === "tab-" + name));
+  document.querySelectorAll("nav a").forEach(a => a.classList.toggle("on", a.dataset.tab === name));
+}
+addEventListener("hashchange", () => showTab(location.hash.slice(1)));
+
+/* ---------- ПРОГНОЗИ ---------- */
 $("cid").value = localStorage.getItem("pw_cid") || "";
 // на https (DigitalOcean) Twitch повертає токен прямо сюди; локально — на http://localhost, адресу копіюють вручну
 const HTTPS = location.protocol === "https:";
 const REDIRECT = HTTPS ? location.origin + "/setup/" : "http://localhost";
 $("ru").textContent = REDIRECT;
+$("demo").href = new URL("../widget/#demo=1&theme=vice", location.href).href;
+$("theme").onchange = () => $("demo").href = new URL("../widget/#demo=1&theme=" + $("theme").value, location.href).href;
 
 // повернення з Twitch: токен у #fragment (на сервер не потрапляє), перевіряємо state від CSRF
 {
   const h = new URLSearchParams(location.hash.slice(1));
   if (h.has("access_token") || h.has("error")) {
-    history.replaceState(null, "", location.pathname); // прибрати токен з адресного рядка й історії
+    history.replaceState(null, "", location.pathname + "#predictions"); // прибрати токен з адресного рядка й історії
     const ok = h.get("state") && h.get("state") === sessionStorage.getItem("pw_state");
     sessionStorage.removeItem("pw_state");
     if (h.has("error")) { $("msg").className = "err"; $("msg").textContent = "Twitch: " + (h.get("error_description") || h.get("error")); }
     else if (!ok) { $("msg").className = "err"; $("msg").textContent = "Відповідь Twitch не пройшла перевірку state — натисніть «Увійти» ще раз"; }
-    else { $("redir").value = h.get("access_token"); $("msg").className = "ok"; $("msg").textContent = "✔ Токен отримано. Налаштуйте параметри й згенеруйте посилання."; }
+    else { $("redir").value = h.get("access_token"); $("msg").className = "ok"; $("msg").textContent = "✔ Токен отримано. Налаштуйте вигляд і згенеруйте посилання."; }
   }
 }
+showTab(location.hash.slice(1));
 
 $("login").onclick = () => {
   const cid = $("cid").value.trim();
@@ -111,7 +207,7 @@ $("login").onclick = () => {
 $("make").onclick = async () => {
   const msg = $("msg"); msg.className = ""; msg.textContent = "Перевіряю токен…";
   const cid = $("cid").value.trim();
-  let raw = $("redir").value.trim();
+  const raw = $("redir").value.trim();
   const m = raw.match(/access_token=([a-z0-9]+)/i);
   const token = m ? m[1] : raw;
   if (!cid || !token) { msg.className = "err"; msg.textContent = "Потрібні Client ID і адреса з токеном"; return; }
@@ -133,13 +229,42 @@ $("make").onclick = async () => {
     if (!$("res").checked) p.set("results", "0");
     if ($("theme").value) p.set("theme", $("theme").value);
     // параметри після # — фрагмент не йде на сервер, тож токен не потрапить у логи хостингу
-    const url = base + "#" + p.toString();
-    $("out").textContent = url; $("out").style.display = "block"; $("copy").style.display = "inline-block";
-    const days = Math.round(j.expires_in / 86400);
-    msg.className = "ok"; msg.textContent = `✔ Канал: ${j.login}. Токен дійсний ще ~${days} дн.`;
+    $("out").textContent = base + "#" + p; $("out").style.display = "block"; $("copy").style.display = "inline-block";
+    if (!$("t-channel").value) $("t-channel").value = j.login; // підставити канал і для таймера
+    msg.className = "ok"; msg.textContent = `✔ Канал: ${j.login}. Токен дійсний ще ~${Math.round(j.expires_in / 86400)} дн.`;
   } catch (e) { msg.className = "err"; msg.textContent = "Помилка: " + e.message; }
 };
 $("copy").onclick = () => navigator.clipboard.writeText($("out").textContent).then(() => $("copy").textContent = "Скопійовано ✔");
+
+/* ---------- ТАЙМЕР ---------- */
+$("t-channel").value = localStorage.getItem("st_channel") || "";
+const toLocal = d => new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 19);
+$("t-when").value = toLocal(new Date());
+$("t-mode").onchange = () => {
+  const mode = $("t-mode").value;
+  $("t-when-box").style.display = mode === "chat" ? "none" : "block";
+  $("t-when-l").textContent = mode === "start" ? "Час старту" : "Час кінця";
+};
+$("t-make").onclick = () => {
+  const msg = $("t-msg"); msg.className = "err";
+  const mode = $("t-mode").value, p = new URLSearchParams();
+  if (mode === "chat") {
+    const ch = $("t-channel").value.trim().toLowerCase().replace(/^@/, "");
+    if (!/^[a-z0-9_]{3,25}$/.test(ch)) { msg.textContent = "Вкажіть логін каналу (латиниця, цифри, _)"; return; }
+    localStorage.setItem("st_channel", ch);
+    p.set("channel", ch);
+  } else {
+    const t = new Date($("t-when").value).getTime(); // datetime-local = місцевий час ПК
+    if (!t) { msg.textContent = "Вкажіть дату й час"; return; }
+    p.set(mode, t);
+  }
+  p.set("theme", $("t-theme").value);
+  if ($("t-title").value.trim() !== "МАРАФОН GTA VI") p.set("title", $("t-title").value.trim());
+  $("t-out").textContent = new URL("../timer/", location.href.split(/[?#]/)[0]).href + "#" + p;
+  $("t-out").style.display = "block"; $("t-copy").style.display = "inline-block";
+  msg.className = "ok"; msg.textContent = mode === "chat" ? "✔ Готово. Додайте в OBS і напишіть у чаті !timer start, коли марафон почнеться." : "✔ Готово.";
+};
+$("t-copy").onclick = () => navigator.clipboard.writeText($("t-out").textContent).then(() => $("t-copy").textContent = "Скопійовано ✔");
 </script>
 </body>
 </html>

@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
-<title>Таймер марафону</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src wss://irc-ws.chat.twitch.tv; base-uri 'none'; form-action 'none'">
+<title>StreamerTools — таймер марафону</title>
 <style>
   /* шрифт у стилі GTA: лише встановлений на ПК (безкоштовна ліцензія Typodermic не дозволяє роздавати його як webfont) */
   @font-face { font-family: "GTA"; font-display: block;
@@ -18,8 +18,10 @@
   #w { width: 640px; text-align: center; display: none; }
   #w.on { display: block; }
   #label { font-size: 46px; text-transform: uppercase; letter-spacing: .04em; line-height: 1.15; }
-  #clock { font-size: 112px; line-height: 1; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  #clock { font-size: 112px; line-height: 1; font-variant-numeric: tabular-nums; white-space: nowrap; transition: opacity .3s; }
   #clock.days { zoom: .72; } /* «NД ГГ:ХХ:СС» довше — зменшуємо, щоб вміщалось у ширину для будь-якої теми */
+  #clock.paused { animation: blink 1.2s steps(2, start) infinite; } /* на паузі цифри блимають, як у грі */
+  @keyframes blink { to { opacity: .35; } }
 
   /* vice: неоновий захід сонця (як тема vice у віджеті прогнозів) */
   body.vice #label {
@@ -29,6 +31,7 @@
     filter: drop-shadow(0 3px 0 #2a0638) drop-shadow(0 0 12px rgba(255,46,136,.55));
   }
   body.vice #clock { font-style: italic; color: #3ff5e6; text-shadow: 0 0 16px rgba(25,227,212,.7), 0 4px 0 #06121f; }
+  body.vice #clock.stopped { color: #ffd166; text-shadow: 0 0 16px rgba(255,209,102,.7), 0 4px 0 #2a0638; }
 
   /* hud: класичний ігровий HUD */
   body.hud { font-family: "GTA", "Arial Black", "Impact", sans-serif; }
@@ -37,6 +40,7 @@
   }
   body.hud #label { font-size: 40px; }
   body.hud #clock { font-size: 96px; color: #7fd14a; }
+  body.hud #clock.stopped { color: #ffd23f; }
 
   /* sa: як годинник у старих GTA — білий текст у товстому чорному контурі, без кольорів і світіння */
   body.sa { font-family: "GTA", "Arial Black", "Impact", sans-serif; }
@@ -47,52 +51,34 @@
   }
   body.sa #label { font-size: 42px; letter-spacing: .02em; }
   body.sa #clock { font-size: 104px; color: #f2f2f2; }
+  body.sa #clock.stopped { color: #ffd23f; }
 
-  /* генератор посилання (коли параметрів немає) */
-  #form { display: none; font-family: "Segoe UI", Roboto, Arial, sans-serif; background: #0e0e10; color: #efeff1;
-          width: min(560px, 94vw); padding: 24px; border-radius: 10px; }
-  #form.on { display: block; }
-  html.cfg, html.cfg body { background: #0e0e10; overflow: auto; }
-  #form h1 { font-size: 22px; margin-bottom: 10px; }
-  #form label { display: block; margin-top: 12px; font-size: 14px; color: #adadb8; }
-  #form input, #form select, #form button { font: inherit; padding: 9px 12px; border-radius: 6px; border: 1px solid #3a3a3d; width: 100%; background: #18181b; color: #fff; }
-  #form button { background: #9147ff; border: none; cursor: pointer; font-weight: 600; margin-top: 14px; }
-  #form p { font-size: 13px; color: #adadb8; margin-top: 8px; line-height: 1.5; }
-  #out { word-break: break-all; background: #18181b; padding: 10px; border-radius: 6px; margin-top: 12px; display: none; font-size: 13px; }
+  #hint { display: none; font-family: "Segoe UI", Roboto, Arial, sans-serif; color: #efeff1; background: #0e0e10;
+          padding: 24px; border-radius: 10px; max-width: 520px; line-height: 1.5; }
+  #hint.on { display: block; }
+  #hint a { color: #bf94ff; }
+  html.cfg, html.cfg body { background: #0e0e10; }
 </style>
 </head>
 <body>
 <div id="w"><div id="label"></div><div id="clock">00:00:00</div></div>
-
-<div id="form">
-  <h1>Таймер марафону для OBS</h1>
-  <label>Напис зверху</label>
-  <input id="f-title" value="МАРАФОН GTA VI" maxlength="60">
-  <label>Режим</label>
-  <select id="f-mode">
-    <option value="start">Скільки триває (рахує вгору від часу старту)</option>
-    <option value="end">Скільки лишилось (рахує вниз до часу кінця)</option>
-  </select>
-  <label id="f-when-l">Час старту</label>
-  <input id="f-when" type="datetime-local" step="1">
-  <label>Стиль</label>
-  <select id="f-theme"><option value="vice">Vice (неон)</option><option value="hud">HUD (класичний ігровий)</option><option value="sa">San Andreas (білий з чорним контуром)</option></select>
-  <button id="f-make">Згенерувати посилання для OBS</button>
-  <div id="out"></div>
-  <button id="f-copy" style="display:none">Скопіювати</button>
-  <p>Час старту зберігається в самому посиланні, тому таймер не скидається після вимкнення ПК, перезапуску OBS чи стріму. Рахує за годинником вашого ПК. В OBS: джерело «Браузер», розмір 1920×1080 (віджет розтягнеться, далі зменшуйте рамкою).</p>
-</div>
+<div id="hint">Це віджет таймера StreamerTools для OBS. Налаштуйте його і згенеруйте посилання на сторінці <a href="../setup/#timer">налаштувань</a> (вкладка «Таймер марафону»).</div>
 
 <script>
 /* ================== CONFIG ==================
-   timer/#start=<unix ms>   – рахує вгору від цього моменту
-   timer/#end=<unix ms>     – рахує вниз до цього моменту
-   title=МАРАФОН GTA VI     – напис зверху
-   theme=vice|hud|sa        – стиль (за замовч. vice)
-   Без start/end сторінка показує генератор посилання.
+   Режими (один з трьох):
+     timer/#channel=<логін>     – керування з чату: !timer start | pause | stop (або !таймер старт | пауза | стоп).
+                                  Команди приймаються лише від стрімера й модераторів. Стан зберігається
+                                  в localStorage OBS і переживає перезапуск ПК/OBS/стріму.
+     timer/#start=<unix ms>     – рахує вгору від цього моменту
+     timer/#end=<unix ms>       – рахує вниз до цього моменту
+   Додатково:
+     title=МАРАФОН GTA VI       – напис зверху
+     theme=vice|hud|sa          – стиль (за замовч. vice)
 ============================================== */
 const P = new URLSearchParams(location.hash.length > 1 ? location.hash.slice(1) : location.search);
 const START = Number(P.get("start")) || 0, END = Number(P.get("end")) || 0;
+const CHANNEL = (P.get("channel") || "").toLowerCase().replace(/[^a-z0-9_]/g, ""); // логін Twitch: лише a-z0-9_
 const THEME = ["vice", "hud", "sa"].includes(P.get("theme")) ? P.get("theme") : "vice";
 const $ = id => document.getElementById(id);
 document.body.classList.add(THEME);
@@ -104,39 +90,93 @@ function fmt(sec) {
   const d = Math.floor(sec / 86400), hms = pad(Math.floor(sec % 86400 / 3600)) + ":" + pad(Math.floor(sec % 3600 / 60)) + ":" + pad(sec % 60);
   return d ? d + "Д " + hms : hms;
 }
-function seconds(now = Date.now()) {
-  return END ? Math.ceil((END - now) / 1000) : Math.floor((now - START) / 1000);
+
+/* ---------- стан таймера з чату ----------
+   {status: idle|running|paused|stopped, base: накопичені мс до поточного запуску, since: коли запущено}
+   Читаємо з localStorage щотику, тож кілька джерел з цим таймером у різних сценах показують одне й те саме. */
+const KEY = "st_timer_" + CHANNEL;
+const IDLE = { status: "idle", base: 0, since: 0 };
+function load() {
+  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.status) return s; } catch {}
+  return { ...IDLE };
+}
+const save = s => localStorage.setItem(KEY, JSON.stringify(s));
+const elapsed = (s, now) => s.base + (s.status === "running" ? now - s.since : 0);
+
+// публічна: викликається з чату і з тестів. cmd: start|pause|stop
+function command(cmd, now = Date.now()) {
+  const s = load();
+  if (cmd === "start") {
+    if (s.status === "running") return s;
+    // з паузи — продовжуємо; після стопу або з нуля — новий відлік
+    save(s.status === "paused" ? { status: "running", base: s.base, since: now } : { status: "running", base: 0, since: now });
+  } else if (cmd === "pause") {
+    if (s.status !== "running") return s;
+    save({ status: "paused", base: elapsed(s, now), since: 0 });
+  } else if (cmd === "stop") {
+    if (s.status !== "running" && s.status !== "paused") return s;
+    save({ status: "stopped", base: elapsed(s, now), since: 0 });
+  }
+  return load();
+}
+
+const CMDS = { start: "start", "старт": "start", pause: "pause", "пауза": "pause", stop: "stop", "стоп": "stop" };
+// tags — IRC-теги Twitch (їх ставить сервер, підробити не можна)
+function onChat(tags, text) {
+  const m = text.trim().toLowerCase().match(/^!(?:timer|таймер)\s+(\S+)/);
+  if (!m || !CMDS[m[1]]) return;
+  const badges = tags.badges || "";
+  const allowed = tags.mod === "1" || /(^|,)broadcaster\//.test(badges);
+  if (allowed) { command(CMDS[m[1]]); tick(false); }
+}
+
+/* ---------- чат Twitch: анонімне читання через IRC WebSocket (токен не потрібен) ---------- */
+function connectChat() {
+  const ws = new WebSocket("wss://irc-ws.chat.twitch.tv:443");
+  ws.onopen = () => {
+    ws.send("CAP REQ :twitch.tv/tags");
+    ws.send("PASS SCHMOOPIIE");
+    ws.send("NICK justinfan" + (10000 + Math.floor(Math.random() * 80000)));
+    ws.send("JOIN #" + CHANNEL);
+  };
+  ws.onmessage = e => {
+    for (const line of e.data.split("\r\n")) {
+      if (line.startsWith("PING")) { ws.send("PONG :tmi.twitch.tv"); continue; }
+      // @tags :user!user@user.tmi.twitch.tv PRIVMSG #channel :text
+      const m = line.match(/^@(\S+) :\S+ PRIVMSG #\S+ :(.*)$/);
+      if (!m) continue;
+      const tags = Object.fromEntries(m[1].split(";").map(kv => kv.split("=")));
+      onChat(tags, m[2]);
+    }
+  };
+  ws.onclose = () => setTimeout(connectChat, 3000);
 }
 
 function fit() { $("w").style.zoom = Math.min(innerWidth / 660, innerHeight / 220); }
 
-function tick() {
-  const s = seconds();
-  $("clock").textContent = fmt(s);
-  $("clock").classList.toggle("days", s >= 86400);
-  setTimeout(tick, 1000 - Date.now() % 1000 + 5); // вирівнюємо на межу секунди, щоб не «стрибало»
+let tickTimer = null;
+function tick(loop = true) {
+  const now = Date.now();
+  let sec, st = "running";
+  if (CHANNEL) { const s = load(); st = s.status; sec = Math.floor(elapsed(s, now) / 1000); }
+  else sec = END ? Math.ceil((END - now) / 1000) : Math.floor((now - START) / 1000);
+  const c = $("clock");
+  c.textContent = fmt(sec);
+  c.classList.toggle("days", sec >= 86400);
+  c.classList.toggle("paused", st === "paused");
+  c.classList.toggle("stopped", st === "stopped");
+  if (loop) { clearTimeout(tickTimer); tickTimer = setTimeout(tick, 1000 - now % 1000 + 5); } // на межу секунди
 }
 
-if (START || END) {
+if (CHANNEL || START || END) {
   $("label").textContent = P.get("title") || "МАРАФОН GTA VI";
   $("w").className = "on";
   addEventListener("resize", fit); fit();
   tick();
+  if (CHANNEL) connectChat();
 } else {
   document.documentElement.className = "cfg";
-  $("form").className = "on";
-  const toLocal = d => new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 19);
-  $("f-when").value = toLocal(new Date());
-  $("f-mode").onchange = () => $("f-when-l").textContent = $("f-mode").value === "start" ? "Час старту" : "Час кінця";
-  $("f-make").onclick = () => {
-    const t = new Date($("f-when").value).getTime(); // datetime-local = місцевий час ПК
-    if (!t) return alert("Вкажіть дату й час");
-    const p = new URLSearchParams({ [$("f-mode").value]: t, theme: $("f-theme").value });
-    if ($("f-title").value.trim() !== "МАРАФОН GTA VI") p.set("title", $("f-title").value.trim());
-    const url = location.href.split(/[?#]/)[0] + "#" + p;
-    $("out").textContent = url; $("out").style.display = "block"; $("f-copy").style.display = "block";
-  };
-  $("f-copy").onclick = () => navigator.clipboard.writeText($("out").textContent).then(() => $("f-copy").textContent = "Скопійовано ✔");
+  $("hint").className = "on";
 }
 </script>
 </body>

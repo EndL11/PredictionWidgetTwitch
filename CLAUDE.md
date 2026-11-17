@@ -1,9 +1,12 @@
 # CLAUDE.md: контекст проєкту для Claude Code
 
 ## Що це
-OBS Browser Source віджет для прогнозів Twitch за бали каналу. Два файли без збірки і без залежностей:
-- `widget.html`: сам віджет (вся логіка, стилі й розмітка в одному файлі; так і має лишатися, щоб OBS міг відкрити його як локальний файл або через URL).
-- `setup.html`: допоміжна сторінка, яка отримує OAuth-токен (implicit grant) і генерує URL з параметрами для OBS.
+**StreamerTools**: набір віджетів для OBS Browser Source і Twitch. Статичний сайт на DigitalOcean без сервера, збірки й залежностей; кожна сторінка — один HTML-файл:
+- `setup/index.html`: хаб налаштувань з вкладками (`#overview`, `#predictions`, `#timer`). Вкладка прогнозів отримує OAuth-токен (implicit grant, редірект на `https://<домен>/setup/` — ця адреса зареєстрована в Twitch-застосунку, не міняти). Кожна вкладка генерує посилання для OBS.
+- `widget/index.html`: віджет прогнозів (далі в цьому файлі він же `widget.html`).
+- `timer/index.html`: таймер марафону. Режими: `channel` (керування з чату `!timer start|pause|stop` / `!таймер старт|пауза|стоп` від стрімера й модераторів; анонімний IRC `wss://irc-ws.chat.twitch.tv`; стан `{status, base, since}` у `localStorage["st_timer_<channel>"]`, читається щотику), `start`, `end`. Публічні `command(cmd, now)`, `onChat(tags, text)`, `load()` викликаються з тестів.
+- `index.html`: редірект на `setup/`.
+- Параметри всіх віджетів читаються з `#фрагмента` (не йде на сервер), старий `?query` теж працює.
 
 Мова інтерфейсу і коментарів у коді українська. Користувач спілкується українською.
 
@@ -48,13 +51,15 @@ OBS Browser Source віджет для прогнозів Twitch за бали �
 ```bash
 pip install playwright && playwright install chromium
 python tests/test_lifecycle.py [--chrome /path/to/chrome]   # 12 перевірок: показ/приховування, плавність, скасування, центрування, JS-помилки
-python tests/test_timer.py    [--chrome /path/to/chrome]   # таймер марафону: відлік, перезавантаження, end, генератор
+python tests/test_timer.py    [--chrome /path/to/chrome]   # таймер марафону: відлік, дні, end, чат-команди, права, перезапуск
+python tests/test_setup.py    [--chrome /path/to/chrome]   # хаб налаштувань: вкладки, посилання таймера, OAuth state
 python tests/screenshots.py   [--chrome /path/to/chrome]    # оновлює docs/*.png (~45 с)
 ```
 Ручна перевірка: відкрити `widget.html?demo=1`. Перевірка з реальними даними: створити тестовий прогноз на своєму каналі в Twitch (панель «Прогнози» в чаті або в Stream Manager).
 
 ## Правила роботи
 - Зберігати віджет одним файлом без зовнішніх залежностей і CDN.
-- Новий параметр додавати в 4 місця: коментар CONFIG у `widget.html`, обʼєкт `CFG`, поле в `setup.html` (і в генерацію URL), таблицю в README.
+- Новий параметр додавати в 4 місця: коментар CONFIG у віджеті, обʼєкт `CFG`, поле на відповідній вкладці `setup/index.html` (і в генерацію URL), таблицю в README.
+- Нова тулза: окрема папка `<tool>/index.html`, картка на вкладці «Огляд» і своя вкладка в `setup/index.html`, розділ і рядок у таблиці README, тест `tests/test_<tool>.py`.
 - Після змін запускати `tests/test_lifecycle.py`. Якщо змінюється поведінка, додати перевірку.
 - Оновлювати `PROGRESS.md` (історія + беклог).

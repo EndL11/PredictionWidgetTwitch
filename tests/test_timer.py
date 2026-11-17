@@ -55,11 +55,36 @@ async def main():
         check("theme=sa: білий годинник", await pg.evaluate(
             "document.body.classList.contains('sa') && getComputedStyle(document.getElementById('clock')).color === 'rgb(242, 242, 242)'"))
 
-        # 4. без параметрів — генератор посилання
+        # 4. без параметрів — підказка з посиланням на налаштування
         await pg.goto(URL); await pg.reload()
-        await pg.click("#f-make")
-        out = await pg.evaluate("document.getElementById('out').textContent")
-        check(f"генератор дає посилання з start ({out[-60:]})", "#start=" in out and "theme=vice" in out)
+        check("без параметрів показує підказку", await pg.evaluate("document.getElementById('hint').classList.contains('on')"))
+
+        # 5. керування з чату: start / pause / stop, лише стрімер і модератори
+        await pg.goto(f"{URL}#channel=TestChan"); await pg.reload()
+        await pg.evaluate("localStorage.clear()")
+        T0 = 1_800_000_000_000
+        st = lambda: pg.evaluate("load()")
+        await pg.evaluate("onChat({badges:'subscriber/12'}, '!timer start')")
+        check("глядач не може стартувати", (await st())["status"] == "idle")
+        await pg.evaluate("onChat({badges:'broadcaster/1'}, '!timer start')")
+        check("стрімер стартує", (await st())["status"] == "running")
+        await pg.evaluate("onChat({mod:'1', badges:'moderator/1'}, '!таймер пауза')")
+        s = await st()
+        check("модератор ставить на паузу (укр. команда)", s["status"] == "paused")
+        # детерміновано: старт у T0, пауза через 1 год, продовження через 10 хв, стоп ще через 30 хв -> 1:30:00
+        await pg.evaluate("localStorage.clear()")
+        await pg.evaluate(f"command('start', {T0}); command('pause', {T0 + 3600_000}); command('start', {T0 + 4200_000}); command('stop', {T0 + 6000_000})")
+        s = await st()
+        check(f"пауза не рахується, стоп заморожує ({s})", s["status"] == "stopped" and s["base"] == 5400_000)
+        await pg.reload(); await pg.wait_for_timeout(300)
+        c5 = await clock()
+        check(f"після перезапуску OBS показує заморожений час ({c5})", c5 == "01:30:00")
+        await pg.wait_for_timeout(1100)
+        check("заморожений час не йде", await clock() == "01:30:00")
+        await pg.evaluate("onChat({badges:'broadcaster/1'}, '!timer start')")
+        check("старт після стопу — новий відлік з нуля", (await st())["base"] == 0 and (await st())["status"] == "running")
+        await pg.evaluate("onChat({badges:'broadcaster/1'}, '!timer reset')")
+        check("невідома команда ігнорується", (await st())["status"] == "running")
 
         check("немає JS-помилок " + str(errs), not errs)
         await b.close()
