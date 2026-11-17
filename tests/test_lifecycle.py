@@ -86,8 +86,22 @@ async def main():
         rt = await pg.evaluate("document.getElementById('results').getBoundingClientRect().top")
         check(f"списки 3 варіантів вміщаються на 1920×1080 (top={rt:.0f})", rt >= 0)
 
+        # 7б. text_size=150: заголовок крупніший, а списки 3 варіантів і далі вміщаються
+        th = lambda: pg.evaluate("document.getElementById('title').getBoundingClientRect().height / card.getBoundingClientRect().width")
+        h1 = await th()
+        await pg.goto(URL + "#text_size=150"); await pg.reload()
+        await pg.evaluate("""onBegin({id:'m',title:'M',locks_at:new Date(Date.now()+60000).toISOString(),
+            outcomes:['a','b','c'].map(id=>({id,title:id}))},true)""")
+        await pg.evaluate("""onEnd({id:'m',status:'resolved',winning_outcome_id:'a',outcomes:['a','b','c'].map(id=>({id,
+            top_predictors:[{user_name:'n'+id,channel_points_used:100,channel_points_won:id==='a'?300:null}]}))})""")
+        await pg.wait_for_timeout(600)
+        h2 = await th()
+        check(f"text_size=150 збільшує текст відносно картки ({h2 / h1:.2f}×)", 1.4 < h2 / h1 < 1.6)
+        rt = await pg.evaluate("document.getElementById('results').getBoundingClientRect().top")
+        check(f"з text_size=150 списки вміщаються (top={rt:.0f})", rt >= 0)
+
         # 8. параметри з #fragment (токен не йде на сервер); без token віджет нікуди не стукає
-        await pg.goto(URL + "#client_id=abc&rows=3")
+        await pg.goto(URL + "#client_id=abc&rows=3"); await pg.reload()
         check("параметри читаються з #", await pg.evaluate("CFG.clientId === 'abc' && CFG.rows === 3"))
         await pg.goto(URL + "#theme=vice"); await pg.reload()  # зміна лише # не перезавантажує сторінку
         check("theme=vice вмикає тему", await pg.evaluate("document.body.classList.contains('vice')"))

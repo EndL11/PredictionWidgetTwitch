@@ -4,7 +4,7 @@
 **StreamerTools**: набір віджетів для OBS Browser Source і Twitch. Статичний сайт на DigitalOcean без сервера, збірки й залежностей; кожна сторінка — один HTML-файл:
 - `setup/index.html`: хаб налаштувань з вкладками (`#overview`, `#predictions`, `#timer`). Вкладка прогнозів отримує OAuth-токен (implicit grant, редірект на `https://<домен>/setup/` — ця адреса зареєстрована в Twitch-застосунку, не міняти). Кожна вкладка генерує посилання для OBS.
 - `widget/index.html`: віджет прогнозів (далі в цьому файлі він же `widget.html`).
-- `timer/index.html`: таймер марафону. Режими: `channel` (керування з чату `!timer start|pause|stop|reset` / `!таймер старт|пауза|стоп|скинути` від стрімера й модераторів; анонімний IRC `wss://irc-ws.chat.twitch.tv`; стан `{status, base, since}` у `localStorage["st_timer_<channel>"]`, читається щотику), `start`, `end`. Публічні `command(cmd, now)`, `onChat(tags, text)`, `load()` викликаються з тестів.
+- `timer/index.html`: таймер марафону. Режими: `channel` (керування з чату `!timer start|pause|unpause|stop|reset` / `!таймер старт|пауза|продовжити|стоп|скинути` від стрімера й модераторів; анонімний IRC `wss://irc-ws.chat.twitch.tv`; стан `{status, base, since}` у `localStorage["st_timer_<channel>"]`, читається щотику), `start`, `end`. Публічні `command(cmd, now)`, `onChat(tags, text)`, `load()` викликаються з тестів.
 - `index.html`: редірект на `setup/`.
 - Параметри всіх віджетів читаються з `#фрагмента` (не йде на сервер), старий `?query` теж працює.
 

@@ -15,11 +15,11 @@
     height: 100vh; display: flex; align-items: center; justify-content: center;
     font-family: "GTA", "Impact", "Haettenschweiler", "Arial Narrow", "Arial Black", sans-serif; color: #fff;
   }
-  #w { width: 640px; text-align: center; display: none; }
+  /* розмір блоку = розмір вмісту; fit() масштабує його під джерело. Окремі множники розміру — zoom на #label і #clock */
+  #w { text-align: center; display: none; white-space: nowrap; padding: 0 .5em; font-size: 60px; } /* запас під курсив і світіння, які виходять за межі гліфів */
   #w.on { display: block; }
   #label { font-size: 46px; text-transform: uppercase; letter-spacing: .04em; line-height: 1.15; }
-  #clock { font-size: 112px; line-height: 1; font-variant-numeric: tabular-nums; white-space: nowrap; transition: opacity .3s; }
-  #clock.days { zoom: .72; } /* «NД ГГ:ХХ:СС» довше — зменшуємо, щоб вміщалось у ширину для будь-якої теми */
+  #clock { font-size: 112px; line-height: 1; font-variant-numeric: tabular-nums; transition: opacity .3s; }
   #clock.paused { animation: blink 1.2s steps(2, start) infinite; } /* на паузі цифри блимають, як у грі */
   @keyframes blink { to { opacity: .35; } }
 
@@ -67,28 +67,37 @@
 <script>
 /* ================== CONFIG ==================
    Режими (один з трьох):
-     timer/#channel=<логін>     – керування з чату: !timer start | pause | stop | reset (або !таймер старт | пауза | стоп | скинути).
+     timer/#channel=<логін>     – керування з чату: !timer start | pause | unpause | stop | reset (або !таймер старт | пауза | продовжити | стоп | скинути).
                                   Команди приймаються лише від стрімера й модераторів. Стан зберігається
                                   в localStorage OBS і переживає перезапуск ПК/OBS/стріму.
      timer/#start=<unix ms>     – рахує вгору від цього моменту
      timer/#end=<unix ms>       – рахує вниз до цього моменту
    Додатково:
      title=МАРАФОН GTA VI       – напис зверху
+     title_size=100             – розмір напису, % (50–300)
+     clock_size=100             – розмір цифр, % (50–300)
      theme=vice|hud|sa          – стиль (за замовч. vice)
 ============================================== */
 const P = new URLSearchParams(location.hash.length > 1 ? location.hash.slice(1) : location.search);
 const START = Number(P.get("start")) || 0, END = Number(P.get("end")) || 0;
 const CHANNEL = (P.get("channel") || "").toLowerCase().replace(/[^a-z0-9_]/g, ""); // логін Twitch: лише a-z0-9_
 const THEME = ["vice", "hud", "sa"].includes(P.get("theme")) ? P.get("theme") : "vice";
+const pct = (k) => Math.min(3, Math.max(.5, (parseFloat(P.get(k)) || 100) / 100));
+const TITLE_SIZE = pct("title_size"), CLOCK_SIZE = pct("clock_size");
 const $ = id => document.getElementById(id);
 document.body.classList.add(THEME);
 
 const pad = n => String(n).padStart(2, "0");
-// секунди -> ГГ:ХХ:СС, а від 24 годин -> «NД ГГ:ХХ:СС»
+// 1 день, 2–4 дні, 5–20 днів, 21 день…
+function daysWord(d) {
+  const t = d % 10, h = d % 100;
+  return t === 1 && h !== 11 ? "ДЕНЬ" : t >= 2 && t <= 4 && (h < 12 || h > 14) ? "ДНІ" : "ДНІВ";
+}
+// секунди -> ГГ:ХХ:СС, а від 24 годин -> «N ДНІ ГГ:ХХ:СС»
 function fmt(sec) {
   sec = Math.max(0, sec);
   const d = Math.floor(sec / 86400), hms = pad(Math.floor(sec % 86400 / 3600)) + ":" + pad(Math.floor(sec % 3600 / 60)) + ":" + pad(sec % 60);
-  return d ? d + "Д " + hms : hms;
+  return d ? d + " " + daysWord(d) + " " + hms : hms;
 }
 
 /* ---------- стан таймера з чату ----------
@@ -103,13 +112,17 @@ function load() {
 const save = s => localStorage.setItem(KEY, JSON.stringify(s));
 const elapsed = (s, now) => s.base + (s.status === "running" ? now - s.since : 0);
 
-// публічна: викликається з чату і з тестів. cmd: start|pause|stop|reset
+// публічна: викликається з чату і з тестів. cmd: start|pause|unpause|stop|reset
 function command(cmd, now = Date.now()) {
   const s = load();
   if (cmd === "start") {
     if (s.status === "running") return s;
     // з паузи — продовжуємо; після стопу або з нуля — новий відлік
     save(s.status === "paused" ? { status: "running", base: s.base, since: now } : { status: "running", base: 0, since: now });
+  } else if (cmd === "unpause") {
+    // лише продовжує паузу; після стопу чи скидання нічого не робить, щоб випадково не почати новий відлік
+    if (s.status !== "paused") return s;
+    save({ status: "running", base: s.base, since: now });
   } else if (cmd === "pause") {
     if (s.status !== "running") return s;
     save({ status: "paused", base: elapsed(s, now), since: 0 });
@@ -122,7 +135,7 @@ function command(cmd, now = Date.now()) {
   return load();
 }
 
-const CMDS = { start: "start", "старт": "start", pause: "pause", "пауза": "pause", stop: "stop", "стоп": "stop", reset: "reset", "скинути": "reset" };
+const CMDS = { start: "start", "старт": "start", pause: "pause", "пауза": "pause", unpause: "unpause", resume: "unpause", "продовжити": "unpause", stop: "stop", "стоп": "stop", reset: "reset", "скинути": "reset" };
 // tags — IRC-теги Twitch (їх ставить сервер, підробити не можна)
 function onChat(tags, text) {
   const m = text.trim().toLowerCase().match(/^!(?:timer|таймер)\s+(\S+)/);
@@ -154,7 +167,13 @@ function connectChat() {
   ws.onclose = () => setTimeout(connectChat, 3000);
 }
 
-function fit() { $("w").style.zoom = Math.min(innerWidth / 660, innerHeight / 220); }
+// вписуємо вміст у джерело: 97% ширини або 90% висоти — що менше
+function fit() {
+  const w = $("w");
+  w.style.zoom = 1;
+  w.style.zoom = Math.min(innerWidth * .97 / w.offsetWidth, innerHeight * .9 / w.offsetHeight);
+}
+let lastLen = 0;
 
 let tickTimer = null;
 function tick(loop = true) {
@@ -164,7 +183,7 @@ function tick(loop = true) {
   else sec = END ? Math.ceil((END - now) / 1000) : Math.floor((now - START) / 1000);
   const c = $("clock");
   c.textContent = fmt(sec);
-  c.classList.toggle("days", sec >= 86400);
+  if (c.textContent.length !== lastLen) { lastLen = c.textContent.length; fit(); } // змінився формат (напр. з'явились дні)
   c.classList.toggle("paused", st === "paused");
   c.classList.toggle("stopped", st === "stopped");
   if (loop) { clearTimeout(tickTimer); tickTimer = setTimeout(tick, 1000 - now % 1000 + 5); } // на межу секунди
@@ -173,8 +192,10 @@ function tick(loop = true) {
 if (CHANNEL || START || END) {
   $("label").textContent = P.get("title") || "МАРАФОН GTA VI";
   $("w").className = "on";
-  addEventListener("resize", fit); fit();
+  $("label").style.zoom = TITLE_SIZE; $("clock").style.zoom = CLOCK_SIZE;
+  addEventListener("resize", fit);
   tick();
+  document.fonts.ready.then(fit); // шрифт GTA може підвантажитись після першого виміру
   if (CHANNEL) connectChat();
 } else {
   document.documentElement.className = "cfg";

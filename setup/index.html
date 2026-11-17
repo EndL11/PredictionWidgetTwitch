@@ -100,6 +100,7 @@
     </select></div>
     <div><label>Ніків на екрані у списках</label><input id="rows" value="5"></div>
     <div><label>Швидкість прокрутки (px/с)</label><input id="speed" value="35"></div>
+    <div><label>Розмір тексту, % (70–200)</label><input id="tsize" type="number" min="70" max="200" step="10" value="100"></div>
     <div><label>Показувати списки</label><input id="res" type="checkbox" checked></div>
   </div>
   <div class="row">
@@ -131,6 +132,11 @@
       <option value="hud">HUD (класичний ігровий)</option>
     </select></div>
   </div>
+  <div class="row">
+    <div><label>Розмір напису, % (50–300)</label><input id="t-tsize" type="number" min="50" max="300" step="10" value="100"></div>
+    <div><label>Розмір цифр, % (50–300)</label><input id="t-csize" type="number" min="50" max="300" step="10" value="100"></div>
+  </div>
+  <p class="muted">Віджет сам вписується в джерело, тож ці числа задають пропорцію: напр. напис 150% і цифри 100% — напис крупніший відносно цифр.</p>
   <label>Режим</label>
   <select id="t-mode">
     <option value="chat">Керування з чату: старт, пауза, стоп, скидання</option>
@@ -149,6 +155,7 @@
   <table>
     <tr><td><code>!timer start</code> або <code>!таймер старт</code></td><td>Запустити. З паузи — продовжити. Після стопу — новий відлік з нуля.</td></tr>
     <tr><td><code>!timer pause</code> або <code>!таймер пауза</code></td><td>Пауза: час не рахується, цифри блимають.</td></tr>
+    <tr><td><code>!timer unpause</code>, <code>!timer resume</code> або <code>!таймер продовжити</code></td><td>Зняти з паузи. Після стопу чи скидання нічого не робить.</td></tr>
     <tr><td><code>!timer stop</code> або <code>!таймер стоп</code></td><td>Зупинити й заморозити підсумковий час.</td></tr>
     <tr><td><code>!timer reset</code> або <code>!таймер скинути</code></td><td>Скинути на 00:00:00. Таймер стоїть, поки не напишете старт.</td></tr>
   </table>
@@ -229,6 +236,7 @@ $("make").onclick = async () => {
     if ($("speed").value.trim() !== "35") p.set("speed", $("speed").value.trim());
     if (!$("res").checked) p.set("results", "0");
     if ($("theme").value) p.set("theme", $("theme").value);
+    if ($("tsize").value.trim() && $("tsize").value.trim() !== "100") p.set("text_size", $("tsize").value.trim());
     // параметри після # — фрагмент не йде на сервер, тож токен не потрапить у логи хостингу
     $("out").textContent = base + "#" + p; $("out").style.display = "block"; $("copy").style.display = "inline-block";
     if (!$("t-channel").value) $("t-channel").value = j.login; // підставити канал і для таймера
@@ -261,6 +269,8 @@ $("t-make").onclick = () => {
   }
   p.set("theme", $("t-theme").value);
   if ($("t-title").value.trim() !== "МАРАФОН GTA VI") p.set("title", $("t-title").value.trim());
+  for (const [id, k] of [["t-tsize", "title_size"], ["t-csize", "clock_size"]])
+    if ($(id).value.trim() && $(id).value.trim() !== "100") p.set(k, $(id).value.trim());
   $("t-out").textContent = new URL("../timer/", location.href.split(/[?#]/)[0]).href + "#" + p;
   $("t-out").style.display = "block"; $("t-copy").style.display = "inline-block";
   msg.className = "ok"; msg.textContent = mode === "chat" ? "✔ Готово. Додайте в OBS і напишіть у чаті !timer start, коли марафон почнеться." : "✔ Готово.";

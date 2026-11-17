@@ -37,6 +37,8 @@
     transition: opacity .45s ease, transform .45s ease;
   }
   #card.show { opacity: 1; transform: none; }
+  /* text_size: збільшуємо блоки з текстом; ширина в них та сама (zoom на блоці з width:auto), тож розкладка просто стає крупнішою */
+  #title, #body > .duo-head, #body > .bar, #body > .multi-row, #body > .multi-timer, #banner, .prow .pill { zoom: var(--ts, 1); }
   #body { position: relative; }
 
   #title {
@@ -285,6 +287,7 @@
      rows=5                      – скільки ніків видно одночасно у списках результатів
      speed=35                    – швидкість прокрутки результатів (пікселів/сек)
      results=0                   – вимкнути списки переможців/програвших
+     text_size=100               – розмір тексту, % (70–200): блоки з текстом збільшуються через zoom, картка лишається тієї ж ширини
      theme=vice|slant|hud        – vice: неоновий захід сонця; slant: vice з усім блоком під одним нахилом; hud: класичний ігровий HUD (порожньо — стандартна)
 ================================================================= */
 const P = new URLSearchParams(location.hash.length > 1 ? location.hash.slice(1) : location.search);
@@ -301,9 +304,11 @@ const CFG = {
   speed: Math.max(5, parseFloat(P.get("speed") ?? "35")),
   results: P.get("results") !== "0",
   theme: ["vice", "slant", "hud"].includes(P.get("theme")) ? P.get("theme") : "", // лише відомі теми, бо значення стає класом
+  textSize: Math.min(2, Math.max(.7, (parseFloat(P.get("text_size")) || 100) / 100)),
 };
+document.documentElement.style.setProperty("--ts", CFG.textSize);
 if (CFG.theme) document.body.classList.add(...(CFG.theme === "slant" ? ["vice", "slant"] : [CFG.theme])); // slant = vice + нахил
-const ROW_H = 28;
+const ROW_H = Math.round(28 * CFG.textSize); // рядок списку росте разом з текстом
 
 const DEFAULT_COLORS = ["#387aff", "#f5009b", "#00c8af", "#ff9600", "#9147ff",
                         "#ffd37a", "#eb0400", "#00e676", "#7ed4ff", "#bfabff"];
@@ -423,7 +428,7 @@ function twLoop(now) {
 function fit() {
   const n = state?.outcomes?.length || 2;
   const baseH = n <= 2 ? 360 : 460 + (n - 3) * 50; // місце під картку + списки над нею
-  card.style.zoom = Math.min(innerWidth / 660, innerHeight / baseH);
+  card.style.zoom = Math.min(innerWidth / 660, innerHeight / (baseH * CFG.textSize)); // більший текст — вища картка
 }
 addEventListener("resize", fit);
 fit();
