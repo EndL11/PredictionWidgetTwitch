@@ -48,6 +48,7 @@ OBS Browser Source віджет для прогнозів Twitch за бали �
 ```bash
 pip install playwright && playwright install chromium
 python tests/test_lifecycle.py [--chrome /path/to/chrome]   # 12 перевірок: показ/приховування, плавність, скасування, центрування, JS-помилки
+python tests/test_timer.py    [--chrome /path/to/chrome]   # таймер марафону: відлік, перезавантаження, end, генератор
 python tests/screenshots.py   [--chrome /path/to/chrome]    # оновлює docs/*.png (~45 с)
 ```
 Ручна перевірка: відкрити `widget.html?demo=1`. Перевірка з реальними даними: створити тестовий прогноз на своєму каналі в Twitch (панель «Прогнози» в чаті або в Stream Manager).

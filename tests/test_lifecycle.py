@@ -89,6 +89,14 @@ async def main():
         # 8. параметри з #fragment (токен не йде на сервер); без token віджет нікуди не стукає
         await pg.goto(URL + "#client_id=abc&rows=3")
         check("параметри читаються з #", await pg.evaluate("CFG.clientId === 'abc' && CFG.rows === 3"))
+        await pg.goto(URL + "#theme=vice"); await pg.reload()  # зміна лише # не перезавантажує сторінку
+        check("theme=vice вмикає тему", await pg.evaluate("document.body.classList.contains('vice')"))
+        await pg.goto(URL + "#theme=hud"); await pg.reload()
+        check("theme=hud вмикає тему", await pg.evaluate("document.body.classList.contains('hud')"))
+        await pg.goto(URL + "#theme=slant"); await pg.reload()
+        check("theme=slant = vice + нахил", await pg.evaluate("document.body.className === 'vice slant'"))
+        await pg.goto(URL + "#theme=x%20y"); await pg.reload()
+        check("невідома тема ігнорується", await pg.evaluate("document.body.className === ''"))
 
         check("немає JS-помилок " + str(errs), not errs)
         await b.close()

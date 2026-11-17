@@ -53,6 +53,7 @@
 <div class="row">
   <div><label>Ніків на екрані у списках</label><input id="rows" value="5"></div>
   <div><label>Швидкість прокрутки (px/с)</label><input id="speed" value="35"></div>
+  <div><label>Тема</label><select id="theme" style="font:inherit;padding:9px 12px;border-radius:6px;background:#18181b;color:#fff;border:1px solid #3a3a3d;width:100%"><option value="">Стандартна</option><option value="vice">Vice (неоновий захід сонця)</option><option value="slant">Vice косий (усе під одним нахилом)</option><option value="hud">HUD (класичний ігровий)</option></select></div>
   <div><label>Показувати списки</label><input id="res" type="checkbox" checked style="width:auto;margin-top:12px"></div>
 </div>
 <button id="make">Згенерувати посилання для OBS</button>
@@ -130,6 +131,7 @@ $("make").onclick = async () => {
     if ($("rows").value.trim() !== "5") p.set("rows", $("rows").value.trim());
     if ($("speed").value.trim() !== "35") p.set("speed", $("speed").value.trim());
     if (!$("res").checked) p.set("results", "0");
+    if ($("theme").value) p.set("theme", $("theme").value);
     // параметри після # — фрагмент не йде на сервер, тож токен не потрапить у логи хостингу
     const url = base + "#" + p.toString();
     $("out").textContent = url; $("out").style.display = "block"; $("copy").style.display = "inline-block";

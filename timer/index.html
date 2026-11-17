@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<title>Таймер марафону</title>
+<style>
+  /* шрифт у стилі GTA: лише встановлений на ПК (безкоштовна ліцензія Typodermic не дозволяє роздавати його як webfont) */
+  @font-face { font-family: "GTA"; font-display: block;
+    src: local("Pricedown"), local("Pricedown Bl"), local("Pricedown Black"); }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: transparent; overflow: hidden; }
+  body {
+    height: 100vh; display: flex; align-items: center; justify-content: center;
+    font-family: "GTA", "Impact", "Haettenschweiler", "Arial Narrow", "Arial Black", sans-serif; color: #fff;
+  }
+  #w { width: 640px; text-align: center; display: none; }
+  #w.on { display: block; }
+  #label { font-size: 46px; text-transform: uppercase; letter-spacing: .04em; line-height: 1.15; }
+  #clock { font-size: 112px; line-height: 1; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  #clock.days { zoom: .72; } /* «NД ГГ:ХХ:СС» довше — зменшуємо, щоб вміщалось у ширину для будь-якої теми */
+
+  /* vice: неоновий захід сонця (як тема vice у віджеті прогнозів) */
+  body.vice #label {
+    font-style: italic;
+    background: linear-gradient(90deg, #ffd166, #ff8a3d 35%, #ff2e88 70%, #b14dff);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 3px 0 #2a0638) drop-shadow(0 0 12px rgba(255,46,136,.55));
+  }
+  body.vice #clock { font-style: italic; color: #3ff5e6; text-shadow: 0 0 16px rgba(25,227,212,.7), 0 4px 0 #06121f; }
+
+  /* hud: класичний ігровий HUD */
+  body.hud { font-family: "GTA", "Arial Black", "Impact", sans-serif; }
+  body.hud #label, body.hud #clock {
+    text-shadow: -3px -3px 0 #000, 3px -3px 0 #000, -3px 3px 0 #000, 3px 3px 0 #000, 0 4px 0 #000, 4px 4px 0 #000;
+  }
+  body.hud #label { font-size: 40px; }
+  body.hud #clock { font-size: 96px; color: #7fd14a; }
+
+  /* sa: як годинник у старих GTA — білий текст у товстому чорному контурі, без кольорів і світіння */
+  body.sa { font-family: "GTA", "Arial Black", "Impact", sans-serif; }
+  body.sa #label, body.sa #clock {
+    color: #fff;
+    text-shadow: -3px -3px 0 #000, 0 -3px 0 #000, 3px -3px 0 #000, -3px 0 0 #000, 3px 0 0 #000,
+                 -3px 3px 0 #000, 0 3px 0 #000, 3px 3px 0 #000, 4px 5px 0 #000;
+  }
+  body.sa #label { font-size: 42px; letter-spacing: .02em; }
+  body.sa #clock { font-size: 104px; color: #f2f2f2; }
+
+  /* генератор посилання (коли параметрів немає) */
+  #form { display: none; font-family: "Segoe UI", Roboto, Arial, sans-serif; background: #0e0e10; color: #efeff1;
+          width: min(560px, 94vw); padding: 24px; border-radius: 10px; }
+  #form.on { display: block; }
+  html.cfg, html.cfg body { background: #0e0e10; overflow: auto; }
+  #form h1 { font-size: 22px; margin-bottom: 10px; }
+  #form label { display: block; margin-top: 12px; font-size: 14px; color: #adadb8; }
+  #form input, #form select, #form button { font: inherit; padding: 9px 12px; border-radius: 6px; border: 1px solid #3a3a3d; width: 100%; background: #18181b; color: #fff; }
+  #form button { background: #9147ff; border: none; cursor: pointer; font-weight: 600; margin-top: 14px; }
+  #form p { font-size: 13px; color: #adadb8; margin-top: 8px; line-height: 1.5; }
+  #out { word-break: break-all; background: #18181b; padding: 10px; border-radius: 6px; margin-top: 12px; display: none; font-size: 13px; }
+</style>
+</head>
+<body>
+<div id="w"><div id="label"></div><div id="clock">00:00:00</div></div>
+
+<div id="form">
+  <h1>Таймер марафону для OBS</h1>
+  <label>Напис зверху</label>
+  <input id="f-title" value="МАРАФОН GTA VI" maxlength="60">
+  <label>Режим</label>
+  <select id="f-mode">
+    <option value="start">Скільки триває (рахує вгору від часу старту)</option>
+    <option value="end">Скільки лишилось (рахує вниз до часу кінця)</option>
+  </select>
+  <label id="f-when-l">Час старту</label>
+  <input id="f-when" type="datetime-local" step="1">
+  <label>Стиль</label>
+  <select id="f-theme"><option value="vice">Vice (неон)</option><option value="hud">HUD (класичний ігровий)</option><option value="sa">San Andreas (білий з чорним контуром)</option></select>
+  <button id="f-make">Згенерувати посилання для OBS</button>
+  <div id="out"></div>
+  <button id="f-copy" style="display:none">Скопіювати</button>
+  <p>Час старту зберігається в самому посиланні, тому таймер не скидається після вимкнення ПК, перезапуску OBS чи стріму. Рахує за годинником вашого ПК. В OBS: джерело «Браузер», розмір 1920×1080 (віджет розтягнеться, далі зменшуйте рамкою).</p>
+</div>
+
+<script>
+/* ================== CONFIG ==================
+   timer/#start=<unix ms>   – рахує вгору від цього моменту
+   timer/#end=<unix ms>     – рахує вниз до цього моменту
+   title=МАРАФОН GTA VI     – напис зверху
+   theme=vice|hud|sa        – стиль (за замовч. vice)
+   Без start/end сторінка показує генератор посилання.
+============================================== */
+const P = new URLSearchParams(location.hash.length > 1 ? location.hash.slice(1) : location.search);
+const START = Number(P.get("start")) || 0, END = Number(P.get("end")) || 0;
+const THEME = ["vice", "hud", "sa"].includes(P.get("theme")) ? P.get("theme") : "vice";
+const $ = id => document.getElementById(id);
+document.body.classList.add(THEME);
+
+const pad = n => String(n).padStart(2, "0");
+// секунди -> ГГ:ХХ:СС, а від 24 годин -> «NД ГГ:ХХ:СС»
+function fmt(sec) {
+  sec = Math.max(0, sec);
+  const d = Math.floor(sec / 86400), hms = pad(Math.floor(sec % 86400 / 3600)) + ":" + pad(Math.floor(sec % 3600 / 60)) + ":" + pad(sec % 60);
+  return d ? d + "Д " + hms : hms;
+}
+function seconds(now = Date.now()) {
+  return END ? Math.ceil((END - now) / 1000) : Math.floor((now - START) / 1000);
+}
+
+function fit() { $("w").style.zoom = Math.min(innerWidth / 660, innerHeight / 220); }
+
+function tick() {
+  const s = seconds();
+  $("clock").textContent = fmt(s);
+  $("clock").classList.toggle("days", s >= 86400);
+  setTimeout(tick, 1000 - Date.now() % 1000 + 5); // вирівнюємо на межу секунди, щоб не «стрибало»
+}
+
+if (START || END) {
+  $("label").textContent = P.get("title") || "МАРАФОН GTA VI";
+  $("w").className = "on";
+  addEventListener("resize", fit); fit();
+  tick();
+} else {
+  document.documentElement.className = "cfg";
+  $("form").className = "on";
+  const toLocal = d => new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 19);
+  $("f-when").value = toLocal(new Date());
+  $("f-mode").onchange = () => $("f-when-l").textContent = $("f-mode").value === "start" ? "Час старту" : "Час кінця";
+  $("f-make").onclick = () => {
+    const t = new Date($("f-when").value).getTime(); // datetime-local = місцевий час ПК
+    if (!t) return alert("Вкажіть дату й час");
+    const p = new URLSearchParams({ [$("f-mode").value]: t, theme: $("f-theme").value });
+    if ($("f-title").value.trim() !== "МАРАФОН GTA VI") p.set("title", $("f-title").value.trim());
+    const url = location.href.split(/[?#]/)[0] + "#" + p;
+    $("out").textContent = url; $("out").style.display = "block"; $("f-copy").style.display = "block";
+  };
+  $("f-copy").onclick = () => navigator.clipboard.writeText($("out").textContent).then(() => $("f-copy").textContent = "Скопійовано ✔");
+}
+</script>
+</body>
+</html>
