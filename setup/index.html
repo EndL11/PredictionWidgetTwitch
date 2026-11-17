@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src https://id.twitch.tv; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src https://id.twitch.tv; frame-src 'self'; base-uri 'none'; form-action 'none'">
 <title>StreamerTools — налаштування</title>
 <style>
   body { font-family: "Segoe UI", Roboto, Arial, sans-serif; background: #0e0e10; color: #efeff1;
@@ -38,6 +38,11 @@
   .card p { margin: 0 0 12px; color: #c8c8d0; font-size: 14px; }
   .card a.btn { display: inline-block; background: #9147ff; color: #fff; text-decoration: none; padding: 8px 14px; border-radius: 6px; font-weight: 600; }
   table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  /* прев'ю: iframe має реальний розмір джерела і масштабується transform-ом під ширину сторінки */
+  .pv { position: relative; overflow: hidden; border: 1px solid #3a3a3d; border-radius: 6px; margin-top: 12px;
+        background: linear-gradient(180deg, #1b2a4a, #3d5a6c 60%, #7a8b6a); }
+  .pv iframe { position: absolute; left: 0; top: 0; border: 0; transform-origin: 0 0; background: transparent; }
+  label output { color: #fff; font-weight: 600; }
   td { border-top: 1px solid #2f2f35; padding: 6px 8px; vertical-align: top; }
 </style>
 </head>
@@ -60,7 +65,7 @@
     </div>
     <div class="card">
       <h3>Таймер марафону</h3>
-      <p>Напис «МАРАФОН GTA VI» і час до секунди (з днями). Старт, пауза, стоп і скидання — командами в чаті. Не скидається після перезапуску ПК чи OBS.</p>
+      <p>Напис «МАРАФОН GTA VI» і час до секунди (з днями). Старт, пауза, стоп і скидання — командами стрімера в чаті. Не скидається після перезапуску ПК чи OBS.</p>
       <a class="btn" href="#timer">Налаштувати</a>
     </div>
   </div>
@@ -136,7 +141,42 @@
     <div><label>Розмір напису, % (50–300)</label><input id="t-tsize" type="number" min="50" max="300" step="10" value="100"></div>
     <div><label>Розмір цифр, % (50–300)</label><input id="t-csize" type="number" min="50" max="300" step="10" value="100"></div>
   </div>
-  <p class="muted">Віджет сам вписується в джерело, тож ці числа задають пропорцію: напр. напис 150% і цифри 100% — напис крупніший відносно цифр.</p>
+  <div class="row">
+    <div><label>Як писати дні</label><select id="t-days">
+      <option value="full">Повністю: 3 дні 05:42:19</option>
+      <option value="short">Скорочено: 3Д 05:42:19</option>
+      <option value="hours">Без днів: 77:42:19</option>
+      <option value="custom">Свій текст</option>
+    </select></div>
+    <div id="t-dtext-box" style="display:none"><label>Свій текст (одне слово або три форми через кому: 1 / 2–4 / 5+)</label><input id="t-dtext" placeholder="наприклад: день,дні,днів або DAYS" maxlength="70"></div>
+  </div>
+  <p class="muted">Ці числа задають пропорцію між написом і цифрами; загальний розмір — повзунок «Розмір блоку» нижче.</p>
+
+  <h2>2. Розташування і прев'ю</h2>
+  <p class="muted">Тягніть мишкою весь блок, щоб пересунути його, або напис (жовта рамка), щоб зсунути лише його. Рамки видно лише тут, в OBS їх немає.</p>
+  <div class="row">
+    <div><label>Розмір джерела в OBS, ширина</label><input id="t-sw" type="number" min="200" max="3840" value="1920"></div>
+    <div><label>висота</label><input id="t-sh" type="number" min="100" max="2160" value="1080"></div>
+    <div><label>Показати в прев'ю з днями</label><input id="t-pvdays" type="checkbox" checked></div>
+  </div>
+  <div id="t-pv" class="pv"><iframe id="t-frame" title="Прев'ю таймера"></iframe></div>
+  <p id="t-fitwarn" class="err" style="display:none">Напис або цифри не вміщаються в джерело з такими розміром і розташуванням — таймер сам зменшився або підсунувся до краю, щоб нічого не обрізалось.</p>
+  <div class="row">
+    <div><label>По горизонталі, % <output id="t-x-v"></output></label><input id="t-x" type="range" min="0" max="100" step="0.5" value="50"></div>
+    <div><label>По вертикалі, % <output id="t-y-v"></output></label><input id="t-y" type="range" min="0" max="100" step="0.5" value="50"></div>
+    <div><label>Розмір блоку, % ширини <output id="t-size-v"></output></label><input id="t-size" type="range" min="10" max="100" step="1" value="97"></div>
+  </div>
+  <div class="row">
+    <div><label>Вирівнювання</label><select id="t-align"><option value="center">По центру</option><option value="left">Ліворуч</option><option value="right">Праворуч</option></select></div>
+    <div><label>Відступ між написом і цифрами <output id="t-gap-v"></output></label><input id="t-gap" type="range" min="-100" max="300" step="1" value="0"></div>
+  </div>
+  <div class="row">
+    <div><label>Зсув напису вбік <output id="t-tx-v"></output></label><input id="t-tx" type="range" min="-600" max="600" step="1" value="0"></div>
+    <div><label>Зсув напису вгору/вниз <output id="t-ty-v"></output></label><input id="t-ty" type="range" min="-600" max="600" step="1" value="0"></div>
+    <div><button id="t-reset-pos" type="button">Скинути розташування</button></div>
+  </div>
+
+  <h2>3. Посилання</h2>
   <label>Режим</label>
   <select id="t-mode">
     <option value="chat">Керування з чату: старт, пауза, стоп, скидання</option>
@@ -150,8 +190,8 @@
   <div id="t-out" class="out"></div>
   <button id="t-copy" style="display:none">Скопіювати</button>
 
-  <h2>2. Команди в чаті</h2>
-  <p class="muted">Працюють лише від стрімера й модераторів каналу. Віджет читає чат анонімно, токен не потрібен.</p>
+  <h2>4. Команди в чаті</h2>
+  <p class="muted">Працюють лише від стрімера: модератори й глядачі таймером не керують. Віджет читає чат анонімно, токен не потрібен.</p>
   <table>
     <tr><td><code>!timer start</code> або <code>!таймер старт</code></td><td>Запустити. З паузи — продовжити. Після стопу — новий відлік з нуля.</td></tr>
     <tr><td><code>!timer pause</code> або <code>!таймер пауза</code></td><td>Пауза: час не рахується, цифри блимають.</td></tr>
@@ -254,6 +294,26 @@ $("t-mode").onchange = () => {
   $("t-when-box").style.display = mode === "chat" ? "none" : "block";
   $("t-when-l").textContent = mode === "start" ? "Час старту" : "Час кінця";
 };
+$("t-days").onchange = () => $("t-dtext-box").style.display = $("t-days").value === "custom" ? "block" : "none";
+// параметри вигляду й розташування — спільні для посилання і прев'ю. Повертає рядок помилки або URLSearchParams.
+// локально (file://) папка не відкриває index.html сама, на сайті — так
+const TIMER_URL = new URL(location.protocol === "file:" ? "../timer/index.html" : "../timer/", location.href.split(/[?#]/)[0]).href;
+const LAYOUT = [["t-x", "x", "50"], ["t-y", "y", "50"], ["t-size", "size", "97"], ["t-gap", "gap", "0"], ["t-tx", "title_x", "0"], ["t-ty", "title_y", "0"]];
+function timerLook(p) {
+  p.set("theme", $("t-theme").value);
+  if ($("t-title").value.trim() !== "МАРАФОН GTA VI") p.set("title", $("t-title").value.trim());
+  if ($("t-days").value !== "full") p.set("days", $("t-days").value);
+  if ($("t-days").value === "custom") {
+    if (!$("t-dtext").value.trim()) return "Впишіть свій текст для днів";
+    p.set("days_text", $("t-dtext").value.trim());
+  }
+  for (const [id, k] of [["t-tsize", "title_size"], ["t-csize", "clock_size"]])
+    if ($(id).value.trim() && $(id).value.trim() !== "100") p.set(k, $(id).value.trim());
+  for (const [id, k, def] of LAYOUT) if ($(id).value !== def) p.set(k, $(id).value);
+  if ($("t-align").value !== "center") p.set("align", $("t-align").value);
+  return p;
+}
+
 $("t-make").onclick = () => {
   const msg = $("t-msg"); msg.className = "err";
   const mode = $("t-mode").value, p = new URLSearchParams();
@@ -267,15 +327,68 @@ $("t-make").onclick = () => {
     if (!t) { msg.textContent = "Вкажіть дату й час"; return; }
     p.set(mode, t);
   }
-  p.set("theme", $("t-theme").value);
-  if ($("t-title").value.trim() !== "МАРАФОН GTA VI") p.set("title", $("t-title").value.trim());
-  for (const [id, k] of [["t-tsize", "title_size"], ["t-csize", "clock_size"]])
-    if ($(id).value.trim() && $(id).value.trim() !== "100") p.set(k, $(id).value.trim());
-  $("t-out").textContent = new URL("../timer/", location.href.split(/[?#]/)[0]).href + "#" + p;
+  const r = timerLook(p);
+  if (typeof r === "string") { msg.textContent = r; return; }
+  $("t-out").textContent = TIMER_URL + "#" + p;
   $("t-out").style.display = "block"; $("t-copy").style.display = "inline-block";
   msg.className = "ok"; msg.textContent = mode === "chat" ? "✔ Готово. Додайте в OBS і напишіть у чаті !timer start, коли марафон почнеться." : "✔ Готово.";
 };
-$("t-copy").onclick = () => navigator.clipboard.writeText($("t-out").textContent).then(() => $("t-copy").textContent = "Скопійовано ✔");
+
+/* ---------- прев'ю таймера ----------
+   iframe з timer/ у режимі preview=1 і фіксованим часом старту (чат не підключається).
+   Зміни полів шлемо повідомленням; перетягування в iframe повертає нові x/y/зсув напису. */
+const frame = $("t-frame");
+function previewHash() {
+  const p = new URLSearchParams({ start: Date.now() - ($("t-pvdays").checked ? (3 * 86400 + 5 * 3600 + 42 * 60) * 1000 : (5 * 3600 + 42 * 60) * 1000) });
+  const r = timerLook(p);
+  if (typeof r === "string") p.delete("days"); // свій текст ще не вписаний — показуємо повну форму
+  p.set("preview", "1");
+  return p.toString();
+}
+function sizePreview() {
+  const sw = Math.max(200, +$("t-sw").value || 1920), sh = Math.max(100, +$("t-sh").value || 1080);
+  const k = $("t-pv").clientWidth / sw;
+  frame.width = sw; frame.height = sh;
+  frame.style.transform = `scale(${k})`;
+  $("t-pv").style.height = sh * k + "px";
+}
+function showValues() { for (const [id] of LAYOUT) $(id + "-v").textContent = $(id).value; }
+let pvQueued = false;
+function sendPreview() {
+  showValues();
+  if (pvQueued) return;
+  pvQueued = true;
+  requestAnimationFrame(() => { pvQueued = false; frame.contentWindow?.postMessage({ type: "st-timer-params", hash: previewHash() }, "*"); });
+}
+function loadPreview() {
+  sizePreview();
+  frame.src = TIMER_URL + "#" + previewHash();
+}
+addEventListener("message", e => {
+  if (e.source !== frame.contentWindow) return; // лише від нашого прев'ю
+  if (e.data?.type === "st-timer-layout") {
+    for (const [id, k] of LAYOUT) if (k in e.data) $(id).value = e.data[k];
+    showValues();
+  } else if (e.data?.type === "st-timer-fit") {
+    $("t-fitwarn").style.display = e.data.limited ? "block" : "none";
+  }
+});
+document.querySelectorAll("#tab-timer input, #tab-timer select").forEach(el => {
+  if (["t-sw", "t-sh"].includes(el.id)) el.addEventListener("input", loadPreview); // новий розмір джерела — перезавантажити iframe
+  else el.addEventListener("input", sendPreview);
+});
+$("t-reset-pos").onclick = () => {
+  for (const [id, , def] of LAYOUT) $(id).value = def;
+  $("t-align").value = "center";
+  sendPreview();
+};
+addEventListener("resize", sizePreview);
+// прев'ю будуємо, коли вкладка таймера вперше стала видимою (поки вона схована, ширина 0)
+let pvReady = false;
+function maybeInitPreview() { if (!pvReady && $("tab-timer").classList.contains("on")) { pvReady = true; loadPreview(); } }
+addEventListener("hashchange", maybeInitPreview);
+maybeInitPreview();
+showValues();$("t-copy").onclick = () => navigator.clipboard.writeText($("t-out").textContent).then(() => $("t-copy").textContent = "Скопійовано ✔");
 </script>
 </body>
 </html>

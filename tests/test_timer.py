@@ -25,14 +25,14 @@ async def main():
         await pg.goto(f"{URL}#start={start}")
         await pg.wait_for_timeout(300)
         c = await clock()
-        check(f"рахує від старту, з днями ({c})", c in ("1 ДЕНЬ 02:03:07", "1 ДЕНЬ 02:03:08"))
+        check(f"рахує від старту, з днями ({c})", c in ("1 день 02:03:07", "1 день 02:03:08"))
         check("напис МАРАФОН GTA VI", await pg.evaluate("document.getElementById('label').textContent") == "МАРАФОН GTA VI")
 
         # 2. «перезапуск OBS»: перезавантаження сторінки не скидає час
         await pg.wait_for_timeout(1200)
         await pg.reload(); await pg.wait_for_timeout(300)
         c2 = await clock()
-        check(f"після перезавантаження не скинувся ({c2})", c2 in ("1 ДЕНЬ 02:03:08", "1 ДЕНЬ 02:03:09", "1 ДЕНЬ 02:03:10"))
+        check(f"після перезавантаження не скинувся ({c2})", c2 in ("1 день 02:03:08", "1 день 02:03:09", "1 день 02:03:10"))
 
         await pg.goto(f"{URL}#start={start + 3 * 3600 * 1000}"); await pg.reload(); await pg.wait_for_timeout(300)
         c4 = await clock()
@@ -40,8 +40,38 @@ async def main():
         w = await pg.evaluate("[document.getElementById('clock').getBoundingClientRect().width, innerWidth]")
         await pg.goto(f"{URL}#start={start - 9 * 86400 * 1000}&theme=sa"); await pg.reload(); await pg.wait_for_timeout(300)
         w2 = await pg.evaluate("document.getElementById('clock').getBoundingClientRect().width")
-        check(f"«10 ДНІВ ...» у темі sa вміщається ({w2:.0f} <= {w[1]})", w2 <= w[1])
-        check("відмінки днів", await pg.evaluate("[1,2,4,5,11,12,21,22,25,101,111].map(daysWord).join()") == "ДЕНЬ,ДНІ,ДНІ,ДНІВ,ДНІВ,ДНІВ,ДЕНЬ,ДНІ,ДНІВ,ДЕНЬ,ДНІВ")
+        check(f"«10 днів ...» у темі sa вміщається ({w2:.0f} <= {w[1]})", w2 <= w[1])
+        check("відмінки днів", await pg.evaluate("[1,2,4,5,11,12,21,22,25,101,111].map(d => daysWord(d)).join()") == "день,дні,дні,днів,днів,днів,день,дні,днів,день,днів")
+        # формат днів: start — 1 день 2 год 3 хв 7 с тому
+        async def days_fmt(q):
+            await pg.goto(f"{URL}#start={start}&{q}"); await pg.reload(); await pg.wait_for_timeout(300)
+            return (await clock())[:-2]  # без секунд, щоб не залежати від тіку
+        check("days=short → 1Д", await days_fmt("days=short") == "1Д 02:03:")
+        check("days=hours → 26:03", await days_fmt("days=hours") == "26:03:")
+        check("days=custom, одне слово", await days_fmt("days=custom&days_text=DAY") == "1 DAY 02:03:")
+        check("days=custom, три форми", await days_fmt("days=custom&days_text=доба,доби,діб") == "1 доба 02:03:")
+        check("відмінки свого тексту", await pg.evaluate("[1,3,7].map(d => daysWord(d, ['доба','доби','діб'])).join()") == "доба,доби,діб")
+        check("свій текст з HTML виводиться як текст", await days_fmt("days=custom&days_text=%3Cb%3E") == "1 <b> 02:03:")
+        check("days=custom без тексту → повна назва", await days_fmt("days=custom") == "1 день 02:03:")
+
+        # розташування: x/y, розмір блоку, утримання в кадрі
+        rect = "(r => [r.left, r.right, r.top, r.bottom])(document.getElementById('w').getBoundingClientRect())"
+        await pg.goto(f"{URL}#start={start}&x=25&y=30&size=40"); await pg.reload(); await pg.wait_for_timeout(300)
+        l, r_, t, b_ = await pg.evaluate(rect)
+        check(f"x=25 y=30 size=40 ({(l + r_) / 2:.0f}, {(t + b_) / 2:.0f}, ширина {r_ - l:.0f})",
+              abs((l + r_) / 2 - 480) < 3 and abs((t + b_) / 2 - 324) < 3 and abs(r_ - l - 768) < 3)
+        await pg.goto(f"{URL}#start={start}&x=100&y=0&size=60"); await pg.reload(); await pg.wait_for_timeout(300)
+        l, r_, t, b_ = await pg.evaluate(rect)
+        check(f"блок біля краю лишається в кадрі ({[round(v) for v in (l, r_, t, b_)]})", l >= 0 and r_ <= 1920.5 and t >= -0.5 and b_ <= 1080)
+        await pg.goto(f"{URL}#start={start}&title_size=300&clock_size=300&size=100"); await pg.reload(); await pg.wait_for_timeout(300)
+        l, r_, t, b_ = await pg.evaluate(rect)
+        check("завеликий текст зменшується до розміру джерела", l >= 0 and r_ <= 1920.5 and t >= 0 and b_ <= 1080 and await pg.evaluate("limited"))
+        await pg.goto(f"{URL}#start={start}&gap=80&title_x=50&title_y=-20&align=left"); await pg.reload(); await pg.wait_for_timeout(300)
+        st_ = await pg.evaluate("[getComputedStyle(document.getElementById('clock')).marginTop, document.getElementById('label').style.left, document.getElementById('label').style.top, getComputedStyle(document.getElementById('w')).textAlign]")
+        check(f"gap, зсув напису й вирівнювання ({st_})", st_ == ["80px", "50px", "-20px", "left"])
+        await pg.goto(f"{URL}#start={start}&x=abc&size=-5"); await pg.reload(); await pg.wait_for_timeout(300)
+        check("сміття в параметрах — значення за замовчуванням або межі", await pg.evaluate("C.x === 50 && C.size === 10"))
+
         # окремі розміри напису й цифр: напис 200% стає вдвічі більшим відносно цифр
         sizes = "(() => { const l = document.getElementById('label').getBoundingClientRect().height, c = document.getElementById('clock').getBoundingClientRect().height; return l / c; })()"
         await pg.goto(f"{URL}#start={start}"); await pg.reload(); await pg.wait_for_timeout(300)
@@ -79,9 +109,12 @@ async def main():
         check("глядач не може стартувати", (await st())["status"] == "idle")
         await pg.evaluate("onChat({badges:'broadcaster/1'}, '!timer start')")
         check("стрімер стартує", (await st())["status"] == "running")
-        await pg.evaluate("onChat({mod:'1', badges:'moderator/1'}, '!таймер пауза')")
+        for cmd in ["pause", "stop", "reset", "start"]:
+            await pg.evaluate(f"onChat({{mod:'1', badges:'moderator/1,subscriber/6'}}, '!timer {cmd}')")
+        check("модератор не може нічого (pause/stop/reset/start)", (await st())["status"] == "running")
+        await pg.evaluate("onChat({badges:'broadcaster/1,subscriber/0'}, '!таймер пауза')")
         s = await st()
-        check("модератор ставить на паузу (укр. команда)", s["status"] == "paused")
+        check("стрімер ставить на паузу (укр. команда, кілька бейджів)", s["status"] == "paused")
         # детерміновано: старт у T0, пауза через 1 год, продовження через 10 хв, стоп ще через 30 хв -> 1:30:00
         await pg.evaluate("localStorage.clear()")
         await pg.evaluate(f"command('start', {T0}); command('pause', {T0 + 3600_000}); command('start', {T0 + 4200_000}); command('stop', {T0 + 6000_000})")
@@ -98,7 +131,7 @@ async def main():
         check("невідома команда ігнорується", (await st())["status"] == "running")
         await pg.evaluate("onChat({badges:'subscriber/3'}, '!timer reset')")
         check("глядач не може скинути", (await st())["status"] == "running")
-        await pg.evaluate("onChat({mod:'1'}, '!таймер скинути')")
+        await pg.evaluate("onChat({badges:'broadcaster/1'}, '!таймер скинути')")
         await pg.wait_for_timeout(1100)
         s = await st()
         check(f"скидання: 00:00:00 і стоїть ({s['status']}, {await clock()})", s == {"status": "idle", "base": 0, "since": 0} and await clock() == "00:00:00")
@@ -115,7 +148,7 @@ async def main():
         await pg.evaluate("command('unpause')")
         check("unpause після стопу нічого не робить", (await st())["status"] == "stopped")
         await pg.evaluate("localStorage.clear(); command('start'); command('pause')")
-        await pg.evaluate("onChat({mod:'1'}, '!таймер продовжити')")
+        await pg.evaluate("onChat({badges:'broadcaster/1'}, '!таймер продовжити')")
         check("!таймер продовжити знімає з паузи", (await st())["status"] == "running")
         await pg.evaluate("command('pause')")
         await pg.evaluate("onChat({badges:'broadcaster/1'}, '!timer resume')")

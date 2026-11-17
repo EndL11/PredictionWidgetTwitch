@@ -15,17 +15,22 @@
     height: 100vh; display: flex; align-items: center; justify-content: center;
     font-family: "GTA", "Impact", "Haettenschweiler", "Arial Narrow", "Arial Black", sans-serif; color: #fff;
   }
-  /* розмір блоку = розмір вмісту; fit() масштабує його під джерело. Окремі множники розміру — zoom на #label і #clock */
-  #w { text-align: center; display: none; white-space: nowrap; padding: 0 .5em; font-size: 60px; } /* запас під курсив і світіння, які виходять за межі гліфів */
-  #w.on { display: block; }
-  #label { font-size: 46px; text-transform: uppercase; letter-spacing: .04em; line-height: 1.15; }
+  /* #pos ставить центр блоку в точку (x%, y%) джерела; #w — блок розміром із вміст, fit() масштабує його zoom-ом.
+     Окремі множники розміру — zoom на #label і #clock */
+  #pos { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: none; }
+  #pos.on { display: block; }
+  #w { text-align: center; white-space: nowrap; padding: 0 .5em; font-size: 60px; } /* запас під курсив і світіння, які виходять за межі гліфів */
+  #label { position: relative; font-size: 46px; text-transform: uppercase; letter-spacing: .04em; line-height: 1.15; }
+  /* прев'ю в налаштуваннях: блок і напис можна тягати мишкою */
+  body.preview #w { cursor: move; outline: 3px dashed rgba(255,255,255,.4); outline-offset: 4px; touch-action: none; }
+  body.preview #label { cursor: grab; outline: 2px dashed rgba(255,209,102,.7); }
   #clock { font-size: 112px; line-height: 1; font-variant-numeric: tabular-nums; transition: opacity .3s; }
   #clock.paused { animation: blink 1.2s steps(2, start) infinite; } /* на паузі цифри блимають, як у грі */
   @keyframes blink { to { opacity: .35; } }
 
   /* vice: неоновий захід сонця (як тема vice у віджеті прогнозів) */
   body.vice #label {
-    font-style: italic;
+    font-style: italic; padding: 0 .25em; /* background-clip:text малює лише в межах блоку, а курсив виходить за нього */
     background: linear-gradient(90deg, #ffd166, #ff8a3d 35%, #ff2e88 70%, #b14dff);
     -webkit-background-clip: text; background-clip: text; color: transparent;
     filter: drop-shadow(0 3px 0 #2a0638) drop-shadow(0 0 12px rgba(255,46,136,.55));
@@ -61,43 +66,76 @@
 </style>
 </head>
 <body>
-<div id="w"><div id="label"></div><div id="clock">00:00:00</div></div>
+<div id="pos"><div id="w"><div id="label"></div><div id="clock">00:00:00</div></div></div>
 <div id="hint">Це віджет таймера StreamerTools для OBS. Налаштуйте його і згенеруйте посилання на сторінці <a href="../setup/#timer">налаштувань</a> (вкладка «Таймер марафону»).</div>
 
 <script>
 /* ================== CONFIG ==================
    Режими (один з трьох):
      timer/#channel=<логін>     – керування з чату: !timer start | pause | unpause | stop | reset (або !таймер старт | пауза | продовжити | стоп | скинути).
-                                  Команди приймаються лише від стрімера й модераторів. Стан зберігається
+                                  Команди приймаються лише від стрімера (не від модераторів). Стан зберігається
                                   в localStorage OBS і переживає перезапуск ПК/OBS/стріму.
      timer/#start=<unix ms>     – рахує вгору від цього моменту
      timer/#end=<unix ms>       – рахує вниз до цього моменту
-   Додатково:
+   Вигляд:
      title=МАРАФОН GTA VI       – напис зверху
      title_size=100             – розмір напису, % (50–300)
      clock_size=100             – розмір цифр, % (50–300)
      theme=vice|hud|sa          – стиль (за замовч. vice)
+     days=full|short|hours|custom – як писати дні: «3 дні», «3Д», без днів (77:42:19), або свій текст
+     days_text=день,дні,днів    – для days=custom: одна форма для всіх чисел або три (1 / 2–4 / 5+)
+   Розташування:
+     x=50, y=50                 – де центр блоку, % ширини/висоти джерела
+     size=97                    – ширина блоку, % ширини джерела (10–100; обмежується й висотою)
+     align=center|left|right    – вирівнювання напису й цифр одне відносно одного
+     gap=0                      – відступ між написом і цифрами, px (−100…300)
+     title_x=0, title_y=0       – зсув напису відносно свого місця, px (−600…600)
+     preview=1                  – режим прев'ю для сторінки налаштувань (перетягування мишкою)
 ============================================== */
 const P = new URLSearchParams(location.hash.length > 1 ? location.hash.slice(1) : location.search);
 const START = Number(P.get("start")) || 0, END = Number(P.get("end")) || 0;
 const CHANNEL = (P.get("channel") || "").toLowerCase().replace(/[^a-z0-9_]/g, ""); // логін Twitch: лише a-z0-9_
-const THEME = ["vice", "hud", "sa"].includes(P.get("theme")) ? P.get("theme") : "vice";
-const pct = (k) => Math.min(3, Math.max(.5, (parseFloat(P.get(k)) || 100) / 100));
-const TITLE_SIZE = pct("title_size"), CLOCK_SIZE = pct("clock_size");
+const PREVIEW = P.get("preview") === "1";
 const $ = id => document.getElementById(id);
-document.body.classList.add(THEME);
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const num = (Q, k, def, a, b) => { const v = parseFloat(Q.get(k)); return clamp(Number.isFinite(v) ? v : def, a, b); };
+
+// вигляд і розташування; у прев'ю переписується повідомленнями від сторінки налаштувань
+function parse(Q) {
+  return {
+    title: Q.get("title") || "МАРАФОН GTA VI",
+    theme: ["vice", "hud", "sa"].includes(Q.get("theme")) ? Q.get("theme") : "vice",
+    titleSize: num(Q, "title_size", 100, 50, 300) / 100,
+    clockSize: num(Q, "clock_size", 100, 50, 300) / 100,
+    days: ["full", "short", "hours", "custom"].includes(Q.get("days")) ? Q.get("days") : "full",
+    // свій текст: до трьох форм через кому, кожна до 20 символів; виводиться через textContent
+    custom: (Q.get("days_text") || "").split(",").map(w => w.trim().slice(0, 20)).filter(Boolean).slice(0, 3),
+    x: num(Q, "x", 50, 0, 100), y: num(Q, "y", 50, 0, 100),
+    size: num(Q, "size", 97, 10, 100),
+    align: ["left", "right"].includes(Q.get("align")) ? Q.get("align") : "center",
+    gap: num(Q, "gap", 0, -100, 300),
+    titleX: num(Q, "title_x", 0, -600, 600), titleY: num(Q, "title_y", 0, -600, 600),
+  };
+}
+let C = parse(P);
 
 const pad = n => String(n).padStart(2, "0");
 // 1 день, 2–4 дні, 5–20 днів, 21 день…
-function daysWord(d) {
+function daysWord(d, forms = ["день", "дні", "днів"]) {
   const t = d % 10, h = d % 100;
-  return t === 1 && h !== 11 ? "ДЕНЬ" : t >= 2 && t <= 4 && (h < 12 || h > 14) ? "ДНІ" : "ДНІВ";
+  const i = t === 1 && h !== 11 ? 0 : t >= 2 && t <= 4 && (h < 12 || h > 14) ? 1 : 2;
+  return forms[Math.min(i, forms.length - 1)]; // одна форма — для всіх чисел
 }
-// секунди -> ГГ:ХХ:СС, а від 24 годин -> «N ДНІ ГГ:ХХ:СС»
+// секунди -> ГГ:ХХ:СС, а від 24 годин -> «N дні ГГ:ХХ:СС»
 function fmt(sec) {
   sec = Math.max(0, sec);
-  const d = Math.floor(sec / 86400), hms = pad(Math.floor(sec % 86400 / 3600)) + ":" + pad(Math.floor(sec % 3600 / 60)) + ":" + pad(sec % 60);
-  return d ? d + " " + daysWord(d) + " " + hms : hms;
+  const ms = ":" + pad(Math.floor(sec % 3600 / 60)) + ":" + pad(sec % 60);
+  if (C.days === "hours") return pad(Math.floor(sec / 3600)) + ms; // години не обрізаються на 24
+  const d = Math.floor(sec / 86400), hms = pad(Math.floor(sec % 86400 / 3600)) + ms;
+  if (!d) return hms;
+  if (C.days === "short") return d + "Д " + hms;
+  if (C.days === "custom" && C.custom.length) return d + " " + daysWord(d, C.custom) + " " + hms;
+  return d + " " + daysWord(d) + " " + hms;
 }
 
 /* ---------- стан таймера з чату ----------
@@ -140,9 +178,8 @@ const CMDS = { start: "start", "старт": "start", pause: "pause", "пауз�
 function onChat(tags, text) {
   const m = text.trim().toLowerCase().match(/^!(?:timer|таймер)\s+(\S+)/);
   if (!m || !CMDS[m[1]]) return;
-  const badges = tags.badges || "";
-  const allowed = tags.mod === "1" || /(^|,)broadcaster\//.test(badges);
-  if (allowed) { command(CMDS[m[1]]); tick(false); }
+  // лише стрімер: модератори й глядачі таймер не чіпають
+  if (/(^|,)broadcaster\//.test(tags.badges || "")) { command(CMDS[m[1]]); tick(false); }
 }
 
 /* ---------- чат Twitch: анонімне читання через IRC WebSocket (токен не потрібен) ---------- */
@@ -167,11 +204,37 @@ function connectChat() {
   ws.onclose = () => setTimeout(connectChat, 3000);
 }
 
-// вписуємо вміст у джерело: 97% ширини або 90% висоти — що менше
+/* ---------- розкладка ---------- */
+// вписуємо вміст: size% ширини джерела, але ніколи не більше за саме джерело (98% ширини, 95% висоти),
+// і тримаємо блок повністю в кадрі, навіть якщо x/y біля краю. limited = довелось зменшити або зсунути.
+let limited = false;
 function fit() {
   const w = $("w");
   w.style.zoom = 1;
-  w.style.zoom = Math.min(innerWidth * .97 / w.offsetWidth, innerHeight * .9 / w.offsetHeight);
+  const ow = w.offsetWidth, oh = w.offsetHeight;
+  const want = innerWidth * C.size / 100 / ow;
+  let z = Math.min(want, innerWidth * .98 / ow, innerHeight * .95 / oh);
+  w.style.zoom = z;
+  // ширина тексту під zoom не зовсім лінійна (округлення гліфів), тож міряємо фактичну рамку й за потреби дотискаємо
+  let r = w.getBoundingClientRect();
+  const k = Math.min(1, innerWidth * .98 / r.width, innerHeight * .95 / r.height);
+  if (k < 1) { z *= k; w.style.zoom = z; r = w.getBoundingClientRect(); }
+  const hw = r.width / 2 / innerWidth * 100, hh = r.height / 2 / innerHeight * 100; // половина блоку в % джерела
+  const x = clamp(C.x, hw, 100 - hw), y = clamp(C.y, hh, 100 - hh);
+  $("pos").style.left = x + "%"; $("pos").style.top = y + "%";
+  limited = z < want - 1e-6 || Math.abs(x - C.x) > .05 || Math.abs(y - C.y) > .05;
+  if (PREVIEW) parent.postMessage({ type: "st-timer-fit", limited }, "*");
+}
+function layout() {
+  document.body.classList.remove("vice", "hud", "sa");
+  document.body.classList.add(C.theme);
+  $("label").textContent = C.title;
+  $("label").style.zoom = C.titleSize;
+  $("label").style.left = C.titleX + "px"; $("label").style.top = C.titleY + "px";
+  $("clock").style.zoom = C.clockSize;
+  $("clock").style.marginTop = C.gap + "px";
+  $("w").style.textAlign = C.align;
+  lastLen = 0; tick(false); // перемалювати цифри (формат днів міг змінитись) і перевписати розмір
 }
 let lastLen = 0;
 
@@ -189,14 +252,49 @@ function tick(loop = true) {
   if (loop) { clearTimeout(tickTimer); tickTimer = setTimeout(tick, 1000 - now % 1000 + 5); } // на межу секунди
 }
 
+/* ---------- прев'ю: перетягування мишкою, зв'язок зі сторінкою налаштувань ----------
+   Приймаємо лише повідомлення від батьківського вікна (e.source), шлемо назад лише числа розташування. */
+function startPreview() {
+  document.body.classList.add("preview");
+  let drag = null;
+  const w = $("w");
+  w.addEventListener("pointerdown", e => {
+    e.preventDefault();
+    const onTitle = $("label").contains(e.target);
+    const z = (parseFloat(w.style.zoom) || 1) * (onTitle ? C.titleSize : 1); // перерахунок екранних px у px розкладки
+    drag = { onTitle, z, sx: e.clientX, sy: e.clientY, c: { ...C } };
+    w.setPointerCapture(e.pointerId);
+  });
+  w.addEventListener("pointermove", e => {
+    if (!drag) return;
+    const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+    if (drag.onTitle) {
+      C.titleX = Math.round(clamp(drag.c.titleX + dx / drag.z, -600, 600));
+      C.titleY = Math.round(clamp(drag.c.titleY + dy / drag.z, -600, 600));
+    } else {
+      C.x = Math.round(clamp(drag.c.x + dx / innerWidth * 100, 0, 100) * 10) / 10;
+      C.y = Math.round(clamp(drag.c.y + dy / innerHeight * 100, 0, 100) * 10) / 10;
+    }
+    layout();
+    parent.postMessage({ type: "st-timer-layout", x: C.x, y: C.y, title_x: C.titleX, title_y: C.titleY }, "*");
+  });
+  const end = () => { drag = null; };
+  w.addEventListener("pointerup", end); w.addEventListener("pointercancel", end);
+  addEventListener("message", e => {
+    if (e.source !== parent || e.data?.type !== "st-timer-params" || typeof e.data.hash !== "string") return;
+    C = parse(new URLSearchParams(e.data.hash));
+    layout();
+  });
+}
+
 if (CHANNEL || START || END) {
-  $("label").textContent = P.get("title") || "МАРАФОН GTA VI";
-  $("w").className = "on";
-  $("label").style.zoom = TITLE_SIZE; $("clock").style.zoom = CLOCK_SIZE;
+  $("pos").className = "on";
   addEventListener("resize", fit);
+  layout();
   tick();
   document.fonts.ready.then(fit); // шрифт GTA може підвантажитись після першого виміру
-  if (CHANNEL) connectChat();
+  if (CHANNEL && !PREVIEW) connectChat();
+  if (PREVIEW) startPreview();
 } else {
   document.documentElement.className = "cfg";
   $("hint").className = "on";
